@@ -875,12 +875,18 @@ loaders.settings = async () => {
       ${sy.rebuilt?.length ? `<br>Updated at start-up (${sy.rebuilt.length} tables) — backup: <code>${esc(sy.backup || "")}</code>` : ""}
       ${(sy.repaired || []).map((r) => `<br>Repaired: ${esc(r)}`).join("")}
       ${(m.secrets_moved_to_keychain || []).length ? `<br>🔒 Moved ${m.secrets_moved_to_keychain.length} API key(s) from the file into your keychain.` : ""}</p>
+    <div class="updrow" id="updRow"><span class="hint">Version ${esc(m.app_version || "")}</span>
+      <label style="display:flex;gap:8px;align-items:center;margin:0"><input type="checkbox" id="updChk" ${c.updates?.check !== false ? "checked" : ""}> Check for updates once a day</label>
+      <button class="sm ghost" type="button" id="updNow">Check now</button><span class="hint" id="updMsg"></span></div>
     ${problems.length ? `<ul class="probs">${problems.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>` : `<p class="okline">✓ All packs, rules and the model check out.</p>`}
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
       <a class="btn sm" href="${withToken("/data/export")}" download>Export everything (JSON)</a>
       <label class="btn sm ghost" style="cursor:pointer">Import from JSON…<input type="file" id="importFile" accept=".json,application/json" hidden></label>
       <button class="sm ghost" onclick="openWizard()">Use a different data folder</button></div>
     ${userEnts.length ? `<p style="margin:12px 0 4px"><b>Your record types</b></p><div style="display:flex;gap:6px;flex-wrap:wrap">${userEnts.map(([k, e]) => `<button class="sm ghost" onclick="openRecords('${k}')">${esc(e.label)}</button>`).join("")}</div>` : ""}`;
+  $("#updChk").onchange = async (e) => { await api("/config", { method: "POST", body: { updates: { check: e.target.checked } } }); toast(e.target.checked ? "Update checks on" : "Update checks off"); };
+  $("#updNow").onclick = async () => { $("#updMsg").textContent = "Checking…"; const u = await checkUpdate(true);
+    $("#updMsg").textContent = !u ? "Couldn't check right now" : !u.enabled ? "Update checks are off" : u.error && !u.latest?.version ? "Couldn't reach the website" : u.newer ? `Version ${u.latest.version} is available` : "You have the latest version"; };
   $("#importFile").onchange = async (e) => {
     const file = e.target.files[0]; e.target.value = ""; if (!file) return;
     let data; try { data = JSON.parse(await file.text()); } catch (err) { toast("That file isn't valid JSON"); return; }
@@ -1296,4 +1302,29 @@ addEventListener("resize", () => {
   await loadConfig();
   const start = location.hash.slice(1) || "position";
   ($(`#tabs button[data-tab="${start}"]`) || $("#tabs button")).click();
+  setTimeout(checkUpdate, 1500);
 })();
+
+// ---------------- update notice ----------------
+// The app checks the project's public latest.json at most once a day (Settings → Your data can switch it off).
+// It never installs anything by itself.
+async function checkUpdate(force) {
+  let u; try { u = await api("/update/check" + (force ? "?force=true" : "")); } catch (e) { return null; }
+  let dismissed = ""; try { dismissed = localStorage.getItem("afUpdateDismissed") || ""; } catch (e) { }
+  const el = $("#updateNote");
+  if (u.newer && (force || dismissed !== u.latest.version)) {
+    el.innerHTML = `<span><b>Version ${esc(u.latest.version)} is available</b> — you have ${esc(u.current)}.</span>
+      ${u.latest.notes_url ? `<a href="${esc(u.latest.notes_url)}" target="_blank" rel="noopener">What's new</a>` : ""}
+      <button class="sm" type="button" id="updHow">How to update</button><button class="sm ghost" type="button" id="updLater">Later</button>`;
+    el.hidden = false;
+    $("#updLater").onclick = () => { try { localStorage.setItem("afUpdateDismissed", u.latest.version); } catch (e) { } el.hidden = true; };
+    $("#updHow").onclick = () => {
+      el.innerHTML = `<span><b>Update to ${esc(u.latest.version)}</b> — your data is backed up automatically when the new version first starts.</span>
+        <span>Installed with pipx: <code>${esc(u.latest.install || "pipx upgrade aaryaai-finance")}</code></span>
+        ${u.latest.download_url ? `<span>Using start.bat: <a href="${esc(u.latest.download_url)}" target="_blank" rel="noopener">download the new version</a> and unzip it over the old folder.</span>` : ""}
+        <button class="sm ghost" type="button" id="updClose">Close</button>`;
+      $("#updClose").onclick = () => { el.hidden = true; };
+    };
+  } else el.hidden = true;
+  return u;
+}

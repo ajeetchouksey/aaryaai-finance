@@ -13,3 +13,4 @@ config.yaml
 !examples/**/config.yaml
 data/
 aaryaai-finance-data/
+_site/

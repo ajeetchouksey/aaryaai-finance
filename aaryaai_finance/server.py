@@ -94,6 +94,13 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
             out.append({"day": h["day"], "net_worth": v})
         return out
 
+    # ======================= updates =======================
+    @app.get("/update/check")
+    def update_check(force: bool = False):
+        from . import updates
+        c = ctx()
+        return updates.check(c.settings.data_dir / ".update-check.json", bool(c.settings.config.get("updates", {}).get("check", True)), force)
+
     # ======================= data model =======================
     @app.get("/model")
     def get_model():
@@ -102,7 +109,7 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         return {**M.public(c.model), "errors": c.model_errors, "user_model_path": str(mp),
                 "user_model_text": mp.read_text(encoding="utf-8") if mp.exists() else "",
                 "last_sync": c.db.sync_report, "secrets_moved_to_keychain": c.secrets_moved,
-                "rule_errors": c.rules.errors, "backups_dir": str(c.settings.backups_dir)}
+                "rule_errors": c.rules.errors, "backups_dir": str(c.settings.backups_dir), "app_version": __version__}
 
     @app.post("/model/user")
     def save_user_model(p: dict = Body(...)):
@@ -220,6 +227,8 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
             cfg["ai"] = {**cfg["ai"], **p["ai"]}
         if "fx" in p:
             cfg["fx"] = {**cfg["fx"], **p["fx"]}
+        if "updates" in p:
+            cfg["updates"] = {**cfg.get("updates", {}), "check": bool(p["updates"].get("check", True))}
         c.settings.save()
         for k, v in (p.get("secrets") or {}).items():
             if k in SECRET_KEYS and v:

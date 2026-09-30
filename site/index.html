@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>aaryaai finance — money in two countries, on your own computer</title>
+<meta name="description" content="Open-source personal finance app that runs on your computer. Accounts in several countries and currencies, tax deadlines and calculators, documents sorted by readable rules. AI optional.">
+<meta property="og:title" content="aaryaai finance">
+<meta property="og:description" content="Money in two countries, one app on your own computer. Open source, local-first, AI optional.">
+<meta property="og:image" content="shots/position.png">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="nav"><div class="wrap">
+  <a class="logo" href="./"><img src="assets/favicon.svg" alt=""> aaryaai finance</a>
+  <nav aria-label="Main">
+    <a href="#features">Features</a><a href="#rules">How it decides</a><a href="#privacy">Privacy</a>
+    <a href="docs/">Docs</a><a href="{{repo}}">GitHub</a>
+    <a class="btn primary" href="demo/">Open the demo</a>
+  </nav>
+</div></header>
+
+<main id="main">
+<section class="hero"><div class="wrap herogrid">
+  <div>
+    <div class="eyebrow">Open source · version {{version}}</div>
+    <h1>Money in two countries. <em>One app on your own computer.</em></h1>
+    <p class="lede">See everything you own and owe across currencies, keep up with tax deadlines in each country, and file your documents by rules you can read. Your data never leaves your computer unless you connect an AI.</p>
+    <div class="ctas">
+      <a class="btn primary" href="demo/">Open the demo</a>
+      <a class="btn ghost" href="#download">Install</a>
+    </div>
+    <ul class="facts" aria-label="Key facts"><li>No account</li><li>No cloud</li><li>No tracking</li><li>MIT licence</li></ul>
+  </div>
+
+  <div class="figure" id="fig" aria-live="polite">
+    <div class="top"><span class="lbl">Net worth · sample</span>
+      <button class="eye" type="button" id="eye" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Hide amounts</span></button></div>
+    <div class="big" id="total">{{hero_total}}</div>
+    <div class="alt" id="alt">{{hero_alt}}</div>
+    <div class="split" id="rows">{{hero_rows}}</div>
+    <p class="note">Invented figures from the demo. In the app, one click hides every amount for screen-sharing; dates and percentages stay readable.</p>
+  </div>
+</div>
+<div class="wrap"><figure class="shot"><img src="shots/position.png" alt="The Position screen: net worth split by currency, deadlines coming up, and a flat bought in instalments" width="1440" height="900" loading="eager"></figure></div>
+</section>
+
+<section class="band" id="features"><div class="wrap">
+  <div class="eyebrow">What it does</div>
+  <h2>Built for a life split across borders</h2>
+  <p class="sub">Germany and India come built in. Each country is a readable pack of currencies, tax deadlines, calculators and document types, and you can add your own.</p>
+  <div class="grid3">
+    <div><span class="k">EUR · INR · USD…</span><h3>Where you stand</h3><p>Accounts, assets and debts in every currency, converted at ECB rates or your own. See each country's share and how your net worth moves.</p></div>
+    <div><span class="k">Daily to yearly</span><h3>Money in and out</h3><p>Log income, spending and transfers once, or set them to repeat. Monthly charts show where it went.</p></div>
+    <div><span class="k">PDF · Excel · Word</span><h3>Documents that file themselves</h3><p>Drop a payslip, bank statement or tax form. The rules read it, name it and suggest the folder; you confirm the move.</p></div>
+    <div><span class="k">DE · IN</span><h3>Tax deadlines and calculators</h3><p>Deadlines that follow from your answers, a German refund estimate, India's old vs new regime, 1% TDS on property instalments.</p></div>
+    <div><span class="k">Instalments</span><h3>Big purchases, stage by stage</h3><p>Track a flat under construction: what's paid, what's left with tax, the next instalment, and the documents for each stage.</p></div>
+    <div><span class="k">Goals · practice</span><h3>Plan and learn</h3><p>Inflation-aware goals, a budget, and investing practice with backtests and paper trades. No real trading, ever.</p></div>
+  </div>
+</div></section>
+
+<section class="band" id="rules"><div class="wrap two">
+  <div>
+    <div class="eyebrow">How it decides</div>
+    <h2>Rules first. AI only if you want it.</h2>
+    <p class="sub" style="margin-bottom:24px">Sorting documents and creating deadlines is done by rules written in plain YAML: same input, same result, every time. The Rules screen shows which rule matched and why.</p>
+    <ul class="list">
+      <li><b>No AI</b><span>Everything works: rules, calculators, deadlines, reports.</span></li>
+      <li><b>Claude</b><span>Anthropic API key, or later through Claude Desktop on your plan.</span></li>
+      <li><b>Azure OpenAI</b><span>Your own Azure deployment and key.</span></li>
+      <li><b>GitHub Models</b><span>Free within limits with a GitHub account.</span></li>
+      <li><b>Ollama</b><span>Runs on your computer, so nothing leaves it.</span></li>
+    </ul>
+  </div>
+  <pre class="code" aria-label="Example rule in YAML"><span class="c"># your rules/my-rules.yaml — checked before the country packs</span>
+<span class="y">document_rules:</span>
+  - <span class="y">id:</span> my_gym_invoice
+    <span class="y">label:</span> Gym membership invoice
+    <span class="y">category:</span> Receipts &amp; bills
+    <span class="y">match:</span>
+      <span class="y">text_any:</span> [fitnessfirst, mcfit]
+      <span class="y">filename_any:</span> [gym]
+    <span class="y">extract:</span>
+      - {<span class="y">name:</span> invoice_no, <span class="y">pattern:</span> <span class="s">"Rechnungsnummer\s*:?\s*(\w+)"</span>}
+    <span class="y">route:</span>
+      <span class="y">folder:</span> <span class="s">"{folder:DE}/Receipts/{first_year}"</span>
+      <span class="y">filename:</span> <span class="s">"{first_date}_gym_{invoice_no}{ext}"</span>
+
+<span class="y">deadlines:</span>
+  - <span class="y">id:</span> my_car_insurance
+    <span class="y">title:</span> <span class="s">"Renew car insurance ({year})"</span>
+    <span class="y">due:</span> <span class="s">"{year}-11-30"</span></pre>
+</div></section>
+
+<section class="band" id="privacy"><div class="wrap two">
+  <div>
+    <div class="eyebrow">Privacy and security</div>
+    <h2>Your data stays in one folder you choose</h2>
+    <p class="sub">Back up the folder and you've backed up everything. Delete it and it's gone. There's no server of ours to trust.</p>
+    <a href="docs/privacy.html">Read exactly what is stored and sent →</a>
+  </div>
+  <ul class="list">
+    <li><b>Local only</b><span>The app answers only its own page on this computer. Other websites and other devices are refused.</span></li>
+    <li><b>Keys in the keychain</b><span>API keys go to Windows Credential Manager or macOS Keychain, never to the browser.</span></li>
+    <li><b>Links checked</b><span>Records can't point at things that don't exist; upgrades back up first and never delete data.</span></li>
+    <li><b>Hide amounts</b><span>Alt+H masks every figure when you share your screen.</span></li>
+    <li><b>Open code</b><span>MIT licence, tests on Windows, macOS and Linux, and code scanning on every change.</span></li>
+  </ul>
+</div></section>
+
+<section class="band"><div class="wrap">
+  <div class="eyebrow">Screens</div>
+  <h2>Have a look around</h2>
+  <p class="sub">Every screen from the demo, with invented data. <a href="demo/">Open the demo</a> to click through it yourself.</p>
+  <div class="gallery">
+    <figure><img src="shots/money.png" alt="Money screen with accounts per country, monthly totals and charts" loading="lazy" width="1440" height="900"><figcaption>Money: accounts per country, in and out, repeating entries</figcaption></figure>
+    <div class="stack">
+      <figure><img src="shots/tax.png" alt="Tax desk with deadlines and calculators" loading="lazy" width="1440" height="900"><figcaption>Tax desk for Germany and India</figcaption></figure>
+      <figure><img src="shots/hidden.png" alt="Position screen with every amount hidden" loading="lazy" width="1440" height="900"><figcaption>Hide amounts: Alt+H</figcaption></figure>
+    </div>
+  </div>
+</div></section>
+
+<section class="band" id="download"><div class="wrap install">
+  <div>
+    <div class="eyebrow">Install</div>
+    <h2>Get version {{version}}</h2>
+    <div class="step"><span class="k">Windows</span><h3>Download and double-click</h3>
+      <p>Needs <a href="https://www.python.org/downloads/">Python 3.10 or newer</a>. Unzip, then double-click <code>start.bat</code>; the first start sets itself up.</p>
+      <a class="btn primary" href="{{zip}}">Download v{{version}} (.zip)</a></div>
+    <div class="step"><span class="k">Any system</span><h3>Install with pipx</h3>
+      <code class="cmd">pipx install git+{{repo}}</code>
+      <p style="margin:12px 0 0">Then run <code>aaryaai-finance</code>. It opens in your browser and asks four setup questions.</p></div>
+    <p style="color:var(--muted);font-size:15px">A one-click Windows installer is on the way. The app will tell you when a new version is out; <a href="latest.json">latest.json</a> is what it checks.</p>
+  </div>
+  <div class="notes"><span class="k">What's new · {{released}}</span>{{notes}}<p><a href="docs/changelog.html">Full changelog →</a></p></div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  <img src="assets/logo-mono-white.svg" alt="aaryaai">
+  <span>MIT licence · © {{year}}</span>
+  <span class="sp"></span>
+  <a href="docs/">Docs</a><a href="docs/privacy.html">Privacy</a><a href="{{repo}}">GitHub</a>
+  <span style="flex-basis:100%;font-size:13.5px">Estimates only — not tax, legal or financial advice. Confirm filings with a tax adviser.</span>
+</div></footer>
+<script src="assets/site.js"></script>
+</body>
+</html>

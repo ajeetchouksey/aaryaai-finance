@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 — 2026-09-30
+
+### Website and live demo
+- New project website with docs and a **live demo** you can click through in the browser. The demo is the real app replaying answers recorded from it on invented sample data, so it always matches the current version. Nothing you do in the demo is saved or sent anywhere.
+- New **Getting started** guide.
+
+### Update notice
+- The app checks the website's `latest.json` at most once a day and shows a small notice when a newer version is out, with what's new and how to update. It never downloads or installs anything by itself. Switch it off in **Settings → Your data**, or press **Check now** there.
+
 ## 0.3.0 — 2026-09-30
 
 ### Hide amounts

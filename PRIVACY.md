@@ -26,6 +26,7 @@ The data isn't encrypted by the app. Turn on disk encryption (BitLocker on Windo
 |---|---|---|
 | Exchange rates (European Central Bank via frankfurter.dev) | right after setup, and when you press refresh (Settings or Invest) | the currency codes |
 | Market prices (Yahoo Finance via `yfinance`, optional) | when you refresh prices in Invest | ticker symbols |
+| Update check (the project website on GitHub Pages) | at most once a day; switch off in Settings → Your data | nothing but a request for the public `latest.json` file; the app never downloads or installs anything by itself |
 | Your AI provider | only if you connected one: when you chat, and when you upload a document no rule is sure about (under 60%) | your question, the numbers the assistant asks for through its tools, and for documents the first part of the extracted text |
 
 With **Ollama** as provider, AI stays on your computer too. With no AI provider, nothing about your finances ever leaves the machine.

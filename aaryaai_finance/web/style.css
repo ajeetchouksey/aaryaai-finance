@@ -591,3 +591,9 @@ label.btn.ghost{background:rgba(148,163,184,.06);color:var(--ink);border:1px sol
 .hidebtn.wide{width:100%;height:auto;margin:0 0 10px;padding:8px 12px;display:flex;gap:10px;justify-content:flex-start;white-space:nowrap;text-align:left;font:500 14px var(--body);color:var(--ink2)}
 .hidebtn.wide kbd{margin-left:auto;font:500 10.5px var(--num);color:var(--muted);border:1px solid var(--line2);border-radius:5px;padding:1px 5px}
 .hidebtn.wide[aria-pressed="true"] kbd{color:#e9e5ff;border-color:rgba(233,229,255,.4)}
+
+/* update notice */
+.updnote{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 18px;padding:10px 14px;border-radius:12px;background:rgba(91,75,214,.18);border:1px solid rgba(169,155,255,.35);font-size:14.5px}
+.updnote[hidden]{display:none}
+.updnote a{color:var(--lilac)}
+.updrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:8px 0}

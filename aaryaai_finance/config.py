@@ -36,6 +36,7 @@ DEFAULT_CONFIG: dict = {
     "fx": {"source": "ecb", "manual_rates": {}},
     "ai": {"provider": "none", "model": "", "endpoint": "", "deployment": "", "api_version": "2024-10-21",
            "web_search": True},
+    "updates": {"check": True},  # once a day, fetch the public latest.json; never installs anything by itself
 }
 
 SECRET_KEYS = ["anthropic_api_key", "azure_openai_api_key", "github_token", "ollama_api_key"]

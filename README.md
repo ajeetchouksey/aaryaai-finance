@@ -2,6 +2,8 @@
 
 # aaryaai finance
 
+**Website, docs and live demo:** <https://ajeetchouksey.github.io/aaryaai-finance/>
+
 **A personal finance manager that runs on your own computer.** Net worth across countries and currencies, income and spending, goals, tax deadlines and calculators, document filing and investment learning — all driven by readable rules you can check and change. An AI assistant is optional.
 
 - **Local-first.** One folder on your disk holds everything: settings, database, your rules. Nothing is uploaded. No account, no cloud.

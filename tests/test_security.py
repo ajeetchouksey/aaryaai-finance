@@ -135,3 +135,23 @@ def test_slow_rule_patterns_are_stopped():
         run_patterns([(r"(a+)+$", 0, "a" * 40 + "!")])
     assert time.time() - t < 5
     assert run_patterns([(r"(\d+)", 0, "no 42")]) == [("42", ("42",))]
+
+
+def test_update_check_is_daily_quiet_and_optional(tmp_path):
+    from aaryaai_finance import updates, __version__
+    calls = []
+    def fake(): calls.append(1); return {"version": "99.0.0", "notes_url": "https://x/notes", "install": "pipx install ..."}
+    cache = tmp_path / "u.json"
+    r = updates.check(cache, fetch=fake, now=1000.0)
+    assert r["newer"] and r["latest"]["version"] == "99.0.0" and r["current"] == __version__
+    updates.check(cache, fetch=fake, now=1000.0 + 3600)                   # within a day: no new request
+    assert len(calls) == 1
+    updates.check(cache, fetch=fake, now=1000.0 + 90000)
+    assert len(calls) == 2
+    assert updates.check(cache, enabled=False, fetch=fake) == {"current": __version__, "enabled": False}
+    def offline(): raise OSError("no network")
+    r = updates.check(tmp_path / "v.json", fetch=offline, now=5.0)
+    assert r["newer"] is False and "no network" in r["error"]              # offline never breaks anything
+    assert updates.parse_version("0.10.0") > updates.parse_version("0.9.9")
+    same = updates.check(tmp_path / "w.json", fetch=lambda: {"version": __version__}, now=5.0)
+    assert same["newer"] is False
