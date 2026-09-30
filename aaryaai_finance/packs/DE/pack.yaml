@@ -179,3 +179,13 @@ glossary:
   Werbungskosten: "Work-related expenses; €1,230 is allowed automatically."
   Abgeltungsteuer: "Flat ~26.4% tax (incl. Soli) on interest, dividends and gains."
   Freistellungsauftrag: "Instruction to a bank to pay out investment income tax-free up to your allowance."
+
+# Extra fields this country adds to the data model (stored with each record; see CONTRIBUTING.md).
+model:
+  extends:
+    accounts:
+      fields:
+        de_freistellungsauftrag:
+          type: money
+          label: "Freistellungsauftrag at this bank (€)"
+          help: "Share of your €1,000 / €2,000 tax-free allowance given to this bank. The total across banks must not exceed it."

@@ -36,6 +36,8 @@ document_rules:
 
 **Extract options:** `source: squashed` runs the regex on the text with all spaces removed. `parse` can be `date`, `amount` or `de_month_year` (gives `_year`, `_month`, `_month_name_de`).
 
+**Pattern safety:** rules are data that anyone can share, so the app refuses patterns that could freeze it: longer than 300 characters, or a repeated group that itself contains a repeat or `|` — e.g. `(\d+)+` or `(a|b)*`. Write `\d+` or `[ab]*` instead. A refused rule is skipped and listed under **Settings → Your data**.
+
 **Placeholders** in `folder` and `filename`:
 
 | Placeholder | Value |
@@ -63,17 +65,50 @@ deadlines:
 
 `{year}` is the calendar year; `{tax_year}` the year the filing is about. The app generates every occurrence in the next ~15 months; ticking one off is stored in the database under a stable key, so edits to wording don't lose your ticks.
 
+## The data model (`model.json`)
+
+The database is generated from `aaryaai_finance/model/core.json`. Each record type (*entity*) lists its fields:
+
+| Type | Stored as | Notes |
+|---|---|---|
+| `text`, `date`, `datetime`, `currency`, `country` | text | dates `YYYY-MM-DD`; currency `EUR`; country `DE` |
+| `int`, `bool` | integer | |
+| `number`, `money` | real | |
+| `enum` | text | needs `values`; `strict: false` allows other values |
+| `ref` | integer | a link: `"to": "accounts"`, `"on_delete": "restrict" \| "cascade" \| "set_null"` |
+| `json` | text | |
+
+Field options: `label`, `help`, `required`, `default`, `unique`, `renamed_from` (list of old column names — data is carried over).
+
+**Extending it** — a country pack adds a `model:` section to `pack.yaml`; a user writes `<data folder>/model.json` (or Settings → Custom fields):
+
+```json
+{
+  "extends":  { "accounts": { "fields": { "iban_last4": { "type": "text", "label": "IBAN (last 4)" } } } },
+  "entities": { "policies": { "label": "Insurance policy", "fields": {
+      "name":      { "type": "text", "required": true },
+      "premium":   { "type": "money" },
+      "paid_from": { "type": "ref", "to": "accounts", "on_delete": "set_null" } } } }
+}
+```
+
+Extra fields on built-in record types live in each row's `extra` JSON column, so adding one never changes the table. A pack's extra fields only show on records of that pack's country. New record types get their own table, list and forms.
+
+**Changing core.json** (contributors): edit the model and bump `version`. On start-up the app compares the SQL generated from the model with the database; any table that differs is rebuilt inside one transaction after `finance.db` is backed up to `backups/`. Columns that disappear are kept inside `extra._legacy`, never dropped; use `renamed_from` for renames. Links that point nowhere are repaired without deleting data. Add a test with an old-schema database in `tests/test_model.py`.
+
 ## Adding a country
 
 1. Copy `aaryaai_finance/packs/_template/` to `aaryaai_finance/packs/XX/` (ISO country code).
 2. Fill in `code`, `name`, `flag`, `currency`, `default_folder`, then add questions, deadlines, document rules and a checklist.
 3. For calculators, reuse an engine (`slabs` covers most progressive income taxes). The numbers belong in `params` — a new tax year should only need a YAML change. A new engine goes in `aaryaai_finance/tax/engines.py` with a test.
 4. Cite a source for each deadline and rate (`source:`), and keep `detail` in plain English.
-5. Run `pytest` — `tests/test_packs.py` checks every pack parses cleanly.
+5. Need extra fields (like India's NRE/NRO account type)? Add a `model:` section — see above.
+6. Run `pytest` — `tests/test_packs.py` checks every pack parses cleanly. Problems in a user's own pack show under Settings → Your data.
 
 ## Code
 
 - Backend: FastAPI + SQLite in `aaryaai_finance/`. Frontend: plain JS in `aaryaai_finance/web/` — no build step, no CDN (everything vendored so the app runs offline).
 - New AI providers go in `aaryaai_finance/ai/providers.py`; anything OpenAI-compatible can reuse `OpenAICompatProvider`.
 - Keep it local: no telemetry, no calls home. Network access only for exchange rates, optional market prices, and the AI provider the user chose.
+- **Security:** the server only answers requests with a loopback `Host`, a same-origin `Origin` and the per-start session token (see `create_app` in `server.py`). New endpoints get this for free — don't add routes outside `/static/` that skip it. `tests/test_security.py` covers it.
 - **Never commit personal data.** `tests/test_packs.py` scans the repo for obvious personal identifiers.

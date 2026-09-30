@@ -6,6 +6,7 @@ from datetime import date
 from .config import Settings
 from .core import fx, ledger, planning, trackers as trk
 from .core.db import DB
+from . import model as M
 from .packs import load_packs
 from .rules.engine import RuleSet
 from .tax import engines
@@ -15,13 +16,39 @@ class Ctx:
     def __init__(self, settings: Settings):
         self.settings = settings
         settings.data_dir.mkdir(parents=True, exist_ok=True)
-        self.db = DB(settings.db_path)
+        self.db = None
+        self.secrets_moved = settings.migrate_secrets()
         self.reload()
 
     def reload(self):
         self.packs = load_packs(self.settings)
         self.trackers = trk.load_trackers(self.settings.trackers_dir)
         self.rules = RuleSet(self.settings, self.packs, self.trackers)
+        model, errors = self.build_model()
+        if self.db is None or self.db.model != model:
+            try:
+                db = DB(self.settings.db_path, model, self.settings.backups_dir)
+            except Exception as e:  # noqa: BLE001 — a bad model.json must never stop the app from starting
+                if not self.settings.model_path.exists():
+                    raise
+                model, errors = self.build_model(use_user=False)
+                errors.append(f"model.json couldn't be applied and is ignored until you fix it (Settings → Custom fields): {M.friendly_error(e)}")
+                db = DB(self.settings.db_path, model, self.settings.backups_dir)
+            self.db = db
+        self.model, self.model_errors = model, errors
+
+    def build_model(self, use_user: bool = True) -> tuple[dict, list[str]]:
+        pack_models = [(f"{p.get('name', code)} pack", p["model"]) for code, p in self.packs.items() if p.get("model")]
+        user, errs = None, []
+        mp = self.settings.model_path
+        if use_user and mp.exists():
+            try:
+                import json
+                user = json.loads(mp.read_text(encoding="utf-8"))
+            except ValueError as e:
+                errs.append(f"model.json isn't valid JSON: {e}")
+        model, merrs = M.build(pack_models, user)
+        return model, errs + merrs
 
     # ---------------- money basics
     @property

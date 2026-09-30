@@ -7,6 +7,8 @@
 - **Local-first.** One folder on your disk holds everything: settings, database, your rules. Nothing is uploaded. No account, no cloud.
 - **Multi-country, multi-currency.** Countries are *packs* of YAML rules. Germany 🇩🇪 and India 🇮🇳 ship built in; add your own with a template.
 - **Deterministic.** Documents are sorted and deadlines are created by rules — same input, same result, every time. The Rules tab shows exactly which rule fired and why.
+- **Your data model, your way.** Record types, fields and links are defined in JSON; countries and you can add fields or whole new record types (insurance policies, loans…) without code. Links are enforced, and everything exports to JSON.
+- **Locked down.** Only the app's own page can talk to it (host, origin and session-token checks), API keys live in your system keychain, and shared rules are validated before use.
 - **AI if you want it.** Plug in **Claude** (Anthropic API), **Azure OpenAI / AI Foundry**, **GitHub Models** or **Ollama** (fully offline). The assistant reads your numbers through tools; it can't see files.
 
 > Estimates only. The tax calculators and deadlines are there to help you prepare — confirm filings with a tax adviser.
@@ -50,15 +52,29 @@ Options: `aaryaai-finance --data-dir PATH --port 8770 --no-browser`. The app onl
 ```
 aaryaai-finance-data/
   config.yaml         settings — safe to edit by hand
-  secrets.json        API keys (only here, never sent to the browser)
-  finance.db          SQLite database
+  secrets.json        which API keys are set (the keys are in your system keychain)
+  finance.db          SQLite database, generated from the data model
+  model.json          your own fields and record types (optional)
+  backups/            automatic copies before any database change
   rules/*.yaml        your own document & deadline rules
   packs/XX/pack.yaml  your own or overridden country packs (optional)
   trackers/*.yaml     staged purchases, e.g. a flat under construction
   documents/          filed documents (or any folder you choose)
 ```
 
-Back up the folder and you've backed up everything. See [PRIVACY.md](PRIVACY.md).
+Back up the folder and you've backed up everything, or use **Settings → Export everything (JSON)**. See [PRIVACY.md](PRIVACY.md).
+
+## Architecture
+
+```
+browser tab (plain JS) ──token──▶ FastAPI on 127.0.0.1 ──▶ SQLite (finance.db)
+                                   │                          ▲
+                                   ├─ rules engine ◀── packs/*.yaml, your rules, trackers
+                                   ├─ data model   ◀── model/core.json + pack & user extensions
+                                   └─ AI provider (optional): Claude · Azure OpenAI · GitHub Models · Ollama
+```
+
+The model is the single source of truth for storage: tables, links (foreign keys), validation and the forms for your own record types are all generated from it. Upgrades back up the database, then migrate it in place. Details in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## AI providers
 
@@ -69,7 +85,7 @@ Back up the folder and you've backed up everything. See [PRIVACY.md](PRIVACY.md)
 | GitHub Models | GitHub token with *Models: read* | yes, to GitHub |
 | Ollama | `ollama pull qwen2.5:7b` | **no** |
 
-Keys can also come from environment variables `ANTHROPIC_API_KEY`, `AZURE_OPENAI_API_KEY`, `GITHUB_TOKEN`. Microsoft 365 Copilot isn't supported: its API needs an M365 Copilot licence and is grounded in company data, not a personal app. Details: [docs/ai-providers.md](docs/ai-providers.md).
+Keys are stored in your system keychain. They can also come from environment variables `ANTHROPIC_API_KEY`, `AZURE_OPENAI_API_KEY`, `GITHUB_TOKEN`. Microsoft 365 Copilot isn't supported: its API needs an M365 Copilot licence and is grounded in company data, not a personal app. Details: [docs/ai-providers.md](docs/ai-providers.md).
 
 ## Adding a country or your own rules
 

@@ -1,6 +1,6 @@
 # Connecting an AI assistant
 
-The assistant is optional. It answers questions using tools that read your snapshot (net worth, accounts, goals, deadlines), run the country calculators, add transactions, save goals and tick off deadlines. Choose a provider in **Settings → AI assistant** (or during setup). Keys are stored in `secrets.json` in your data folder.
+The assistant is optional. It answers questions using tools that read your snapshot (net worth, accounts, goals, deadlines), run the country calculators, add transactions, save goals and tick off deadlines. Choose a provider in **Settings → AI assistant** (or during setup). Keys are stored in your system keychain (Windows Credential Manager, macOS Keychain, Linux Secret Service), or in `secrets.json` in your data folder when there is no keychain.
 
 ## Claude (Anthropic API)
 

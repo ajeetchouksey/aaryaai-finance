@@ -25,6 +25,7 @@ Words are matched case-insensitively with spaces and punctuation removed, so
 from __future__ import annotations
 
 import hashlib
+import json
 import io
 import re
 import string
@@ -137,15 +138,180 @@ def common_fields(text: str) -> dict:
     return f
 
 
-def _apply_extractor(ex: dict, text: str, f: dict) -> None:
-    mode = ex.get("source") or ex.get("on") or ex.get(True)   # YAML reads a bare `on:` key as True
-    src = squash(text) if mode == "squashed" else text
+MAX_PATTERN = 300
+MAX_REGEX_TEXT = 100_000
+# A repeated group that itself contains a repeat or an alternative — e.g. (a+)+ or (a|ab)* — can take exponential
+# time on unlucky input ("catastrophic backtracking"). Rules from packs and users are data, so such patterns are refused.
+def _nested_repeat(pat: str) -> bool:
+    """True if a repeated group contains a repeat or an alternative, at any depth (escapes and [...] respected)."""
+    stack, i, n = [], 0, len(pat)
+    def quant_at(j):
+        # any repeat except "at most once" / "exactly once": + * {2} {2,} {2,5} ... count; ? {0,1} {1} {1,1} don't
+        if j >= n:
+            return False
+        if pat[j] in "+*":
+            return True
+        m = re.match(r"\{(\d*)(,?)(\d*)\}", pat[j:])
+        if pat[j] != "{" or not m:
+            return False
+        lo, comma, hi = m.group(1), m.group(2), m.group(3)
+        top = int(hi) if hi else (None if comma else int(lo or 0))
+        return top is None or top > 1
+    while i < n:
+        ch = pat[i]
+        if ch == "\\":
+            i += 2
+            if stack and quant_at(i):
+                stack[-1] = True
+            continue
+        if ch == "[":
+            j = i + 1
+            if j < n and pat[j] == "^": j += 1
+            if j < n and pat[j] == "]": j += 1
+            while j < n and pat[j] != "]":
+                j += 2 if pat[j] == "\\" else 1
+            i = j + 1
+            if stack and quant_at(i):
+                stack[-1] = True
+            continue
+        if ch == "(":
+            stack.append(False)
+        elif ch == ")" and stack:
+            risky = stack.pop()
+            if risky and quant_at(i + 1):
+                return True
+            if stack and (risky or quant_at(i + 1)):
+                stack[-1] = True
+        elif ch == "|" and stack:
+            stack[-1] = True
+        elif stack and ch not in "+*?{" and quant_at(i + 1):
+            stack[-1] = True
+        i += 1
+    return False
+
+
+_ATOM = r"(?:\\[sSwWdD]|\.|\[\\s\\S\]|\[\\w\\W\]|\[\\d\\D\]|\[[^\]]*\]|\\.|[^\\()\[\]{}|*+?.^$])"
+_UNB = r"(?:[*+]|\{\d+,\})\??"
+# same atom twice (\s*\s*, a+a*) or an "anything" atom (.*, [\s\S]*) next to another open-ended repeat
+_ADJACENT = re.compile(rf"({_ATOM}){_UNB}\1{_UNB}|(?:\.|\[\\s\\S\]|\[\\w\\W\]|\[\\d\\D\]){_UNB}{_ATOM}{_UNB}|{_ATOM}{_UNB}(?:\.|\[\\s\\S\]|\[\\w\\W\]|\[\\d\\D\]){_UNB}")
+
+
+def pattern_problem(pat) -> str | None:
+    """Why a rule's regex is unsafe or invalid, or None if it's fine."""
+    if not isinstance(pat, str) or not pat:
+        return "pattern is missing"
+    if len(pat) > MAX_PATTERN:
+        return f"pattern is longer than {MAX_PATTERN} characters"
     try:
-        m = re.search(ex["pattern"], src, re.I if ex.get("ignore_case", True) else 0)
-    except re.error:
+        re.compile(pat)
+    except re.error as e:
+        return f"invalid regex: {e}"
+    if _nested_repeat(pat):
+        return "pattern has a repeated group that contains a repeat or | (can freeze the app) — simplify it"
+    if _ADJACENT.search(pat):
+        return "pattern has two open-ended repeats of overlapping characters next to each other (e.g. \\s*\\s* or .*.*) — merge them"
+    return None
+
+
+def check_rule(r) -> list[str]:
+    """Structural checks shared by pack, tracker and user document rules."""
+    if not isinstance(r, dict) or not r.get("id"):
+        return ["a document rule needs an 'id'"]
+    rid, errs = r["id"], []
+    m = r.get("match")
+    if not isinstance(m, dict) or not any(m.get(k) for k in ("text_all", "text_any", "filename_any")):
+        errs.append(f"{rid}: 'match' needs text_all, text_any or filename_any")
+    else:
+        for k in ("text_all", "text_any", "filename_any"):
+            if m.get(k) is not None and not (isinstance(m[k], list) and all(isinstance(w, (str, int, float)) for w in m[k])):
+                errs.append(f"{rid}: match.{k} must be a list of words")
+    c = r.get("confidence", 0.8)
+    if not isinstance(c, (int, float)) or not 0 < c <= 1:
+        errs.append(f"{rid}: confidence must be between 0 and 1")
+    for ex in r.get("extract", []) or []:
+        if not isinstance(ex, dict) or not ex.get("name"):
+            errs.append(f"{rid}: each extract needs a name and a pattern"); continue
+        why = pattern_problem(ex.get("pattern"))
+        if why:
+            errs.append(f"{rid}: extract '{ex.get('name')}': {why}")
+    route = r.get("route") or {}
+    for k in ("folder", "filename"):
+        v = route.get(k)
+        if v is not None and (not isinstance(v, str) or ".." in v.replace("\\", "/").split("/") or re.match(r"^([A-Za-z]:|/|\\\\)", v)):
+            errs.append(f"{rid}: route.{k} must be a relative path inside your documents folder")
+    return errs
+
+
+class _M:
+    """The parts of a regex match the extractors use (so matches can come back from the worker process)."""
+    def __init__(self, g0, groups):
+        self._g = (g0, *groups)
+        self.lastindex = max((i for i, g in enumerate(groups, 1) if g is not None), default=None)
+
+    def group(self, i=0):
+        return self._g[i]
+
+
+def _search_many(jobs):
+    out = []
+    for pat, flags, text in jobs:
+        try:
+            m = re.search(pat, text, flags)
+        except re.error:
+            m = None
+        out.append((m.group(0), m.groups()) if m else None)
+    return out
+
+
+REGEX_TIMEOUT = 2.0
+_RUNNER = (
+    "import json,re,sys\n"
+    "out=[]\n"
+    "for p,fl,t in json.load(sys.stdin):\n"
+    "  try: m=re.search(p,t,fl)\n"
+    "  except re.error: m=None\n"
+    "  out.append([m.group(0),list(m.groups())] if m else None)\n"
+    "json.dump(out,sys.stdout)\n"
+)
+
+
+def run_patterns(jobs: list) -> list:
+    """Run rule patterns in a separate, throw-away Python process with a time limit, so a pattern from a pack or
+    someone's shared rules can never freeze the app. Built-in patterns don't need this and run in-process."""
+    if not jobs:
+        return []
+    import subprocess
+    import sys
+    try:
+        r = subprocess.run([sys.executable, "-I", "-c", _RUNNER], input=json.dumps(jobs), capture_output=True,
+                           text=True, encoding="utf-8", timeout=REGEX_TIMEOUT,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except subprocess.TimeoutExpired:
+        raise TimeoutError("a rule pattern took too long and was stopped") from None
+    if r.returncode != 0:
+        raise TimeoutError(f"the pattern checker failed: {r.stderr.strip()[-200:]}")
+    return [tuple([x[0], tuple(x[1])]) if x else None for x in json.loads(r.stdout)]
+
+
+def _prepare(ex: dict, text: str):
+    if pattern_problem(ex.get("pattern")):
+        return None
+    mode = ex.get("source") or ex.get("on") or ex.get(True)   # YAML reads a bare `on:` key as True
+    src = (squash(text) if mode == "squashed" else text)[:MAX_REGEX_TEXT]
+    return (ex["pattern"], re.I if ex.get("ignore_case", True) else 0, src)
+
+
+def _apply_extractor(ex: dict, text: str, f: dict, found=False) -> None:
+    if found is False:                       # built-in extractor: run here
+        job = _prepare(ex, text)
+        if not job:
+            return
+        r = _search_many([job])[0]
+    else:
+        r = found
+    if not r:
         return
-    if not m:
-        return
+    m = _M(*r)
     parse = ex.get("parse")
     if parse == "de_month_year" and m.lastindex and m.lastindex >= 2:
         mon = DE_MONTHS.get(m.group(1))
@@ -192,16 +358,7 @@ def validate_rules_yaml(text: str) -> list[str]:
     if not isinstance(d, dict):
         return ["The file must be a mapping with 'document_rules:' and/or 'deadlines:'"]
     for i, r in enumerate(d.get("document_rules", []) or []):
-        if not isinstance(r, dict) or not r.get("id"):
-            errs.append(f"document_rules[{i}] needs an 'id'"); continue
-        m = r.get("match") or {}
-        if not any(m.get(k) for k in ("text_all", "text_any", "filename_any")):
-            errs.append(f"{r['id']}: 'match' needs text_all, text_any or filename_any")
-        for ex in r.get("extract", []) or []:
-            try:
-                re.compile(ex.get("pattern", ""))
-            except re.error as e:
-                errs.append(f"{r['id']}: bad regex in extract '{ex.get('name')}': {e}")
+        errs += [e if isinstance(r, dict) and r.get("id") else f"document_rules[{i}]: {e}" for e in check_rule(r)]
     for i, r in enumerate(d.get("deadlines", []) or []):
         if not isinstance(r, dict) or not r.get("id") or not r.get("title") or not r.get("due"):
             errs.append(f"deadlines[{i}] needs id, title and due")
@@ -222,6 +379,10 @@ class RuleSet:
                 pack_docs.append({**r, "country": r.get("country", code), "_source": f"{p.get('flag', '')} {p.get('name', code)} pack"})
         seen, self.document_rules = set(), []
         for r in user_docs + tracker_docs + pack_docs:          # first one with an id wins
+            bad = check_rule(r)
+            if bad:                                             # a broken rule is skipped and reported, never half-used
+                self.errors += [f"{r.get('_source', '') if isinstance(r, dict) else ''}: {e}".lstrip(": ") for e in bad]
+                continue
             if r.get("id") in seen:
                 continue
             seen.add(r.get("id"))
@@ -273,8 +434,16 @@ class RuleSet:
 
     def fields(self, text: str, rule: dict | None) -> dict:
         f = common_fields(text) if text else {}
-        for ex in (rule or {}).get("extract", []) or []:
-            _apply_extractor(ex, text, f)
+        exs = [ex for ex in (rule or {}).get("extract", []) or [] if isinstance(ex, dict)]
+        jobs = [(ex, _prepare(ex, text)) for ex in exs]
+        jobs = [(ex, j) for ex, j in jobs if j]
+        try:
+            results = run_patterns([j for _, j in jobs])
+        except TimeoutError as e:
+            f["_warning"] = f"Rule '{(rule or {}).get('id')}': {e}. Simplify its extract patterns."
+            return f
+        for (ex, _), r in zip(jobs, results):
+            _apply_extractor(ex, text, f, r)
         return f
 
     def folder(self, key: str) -> str:

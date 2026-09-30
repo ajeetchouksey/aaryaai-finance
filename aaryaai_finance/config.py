@@ -4,7 +4,7 @@ Everything personal is stored in ONE folder you choose (the "data folder"):
 
     <data folder>/
       config.yaml          your settings: countries, currencies, folders, AI provider
-      secrets.json         API keys (never leaves your computer; not in config.yaml)
+      secrets.json         which API keys are set; the keys themselves are in the OS keychain when there is one
       finance.db           accounts, transactions, goals, chats (SQLite)
       rules/*.yaml         your own document & deadline rules (override the country packs)
       packs/<CODE>/pack.yaml   your own country packs (optional)
@@ -88,6 +88,10 @@ class Settings:
     @property
     def db_path(self) -> Path: return self.data_dir / "finance.db"
     @property
+    def model_path(self) -> Path: return self.data_dir / "model.json"
+    @property
+    def backups_dir(self) -> Path: return self.data_dir / "backups"
+    @property
     def rules_dir(self) -> Path: return self.data_dir / "rules"
     @property
     def packs_dir(self) -> Path: return self.data_dir / "packs"
@@ -134,31 +138,94 @@ class Settings:
             "# aaryaai-finance settings — safe to edit by hand; the app re-reads it on restart.\n"
             + yaml.safe_dump(self.config, sort_keys=False, allow_unicode=True), encoding="utf-8")
 
+    # ---- secrets: OS keychain when available (Windows Credential Manager, macOS Keychain, Secret Service),
+    # otherwise secrets.json in the data folder (owner-only permissions). The file then only says "keychain".
+    KEYCHAIN = "keychain"
+
+    def _keyring(self):
+        if os.environ.get("AARYAAI_NO_KEYRING"):
+            return None
+        try:
+            import keyring
+            kr = keyring.get_keyring()
+            if getattr(kr, "priority", 0) <= 0 or type(kr).__module__.startswith(("keyring.backends.fail", "keyring.backends.null")):
+                return None
+            return keyring
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _kr_user(self, key: str) -> str:
+        """Keychain entry name. Uses an id stored in secrets.json, so keys survive moving or renaming the data folder."""
+        s = self.secrets()
+        if not s.get("_id"):
+            import uuid
+            s["_id"] = uuid.uuid4().hex[:16]
+            self._write_secrets(s)
+        return f"{key}@{s['_id']}"
+
     def secrets(self) -> dict:
         try:
             return json.loads(self.secrets_path.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
             return {}
 
-    def set_secret(self, key: str, value: str) -> None:
-        if key not in SECRET_KEYS:
-            raise ValueError(key)
-        s = self.secrets()
-        if value:
-            s[key] = value.strip()
-        else:
-            s.pop(key, None)
+    def _write_secrets(self, s: dict) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        if not s:
+            if self.secrets_path.exists():
+                self.secrets_path.write_text("{}", encoding="utf-8")
+            return
         self.secrets_path.write_text(json.dumps(s, indent=2), encoding="utf-8")
         try:
             os.chmod(self.secrets_path, 0o600)
         except OSError:
             pass
 
+    @property
+    def secret_storage(self) -> str:
+        return "keychain" if self._keyring() else "file"
+
+    def set_secret(self, key: str, value: str) -> None:
+        if key not in SECRET_KEYS:
+            raise ValueError(key)
+        kr = self._keyring()
+        user = self._kr_user(key) if kr else None           # creates the stable id first, so it isn't overwritten below
+        s = self.secrets()
+        value = (value or "").strip()
+        if kr:
+            try:
+                if value:
+                    kr.set_password("aaryaai-finance", user, value)
+                else:
+                    kr.delete_password("aaryaai-finance", user)
+            except Exception:  # noqa: BLE001  — keychain locked/unavailable: fall back to the file
+                kr = None
+        if value:
+            s[key] = self.KEYCHAIN if kr else value
+        else:
+            s.pop(key, None)
+        self._write_secrets(s)
+
     def secret(self, key: str) -> str:
         env = {"anthropic_api_key": "ANTHROPIC_API_KEY", "azure_openai_api_key": "AZURE_OPENAI_API_KEY",
                "github_token": "GITHUB_TOKEN"}.get(key)
-        return self.secrets().get(key) or (os.environ.get(env, "") if env else "")
+        v = self.secrets().get(key) or ""
+        if v == self.KEYCHAIN:
+            kr = self._keyring()
+            try:
+                v = (kr.get_password("aaryaai-finance", self._kr_user(key)) if kr else "") or ""
+            except Exception:  # noqa: BLE001
+                v = ""
+        return v or (os.environ.get(env, "") if env else "")
+
+    def migrate_secrets(self) -> list[str]:
+        """Move keys still stored in plain text into the keychain (when there is one)."""
+        if not self._keyring():
+            return []
+        moved = [k for k, v in self.secrets().items() if k in SECRET_KEYS and v and v != self.KEYCHAIN]
+        for k in moved:
+            self.set_secret(k, self.secrets()[k])
+        return moved
 
     def public(self) -> dict:
         """Config safe to send to the browser (no secrets, just whether they're set)."""
@@ -166,5 +233,6 @@ class Settings:
         c["data_dir"] = str(self.data_dir)
         c["documents_root_resolved"] = str(self.documents_root)
         c["secrets_set"] = {k: bool(self.secret(k)) for k in SECRET_KEYS}
+        c["secrets_storage"] = self.secret_storage
         c["configured"] = self.is_configured
         return c

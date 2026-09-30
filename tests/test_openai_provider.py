@@ -56,7 +56,8 @@ def test_tool_loop_over_openai_wire(fake_llm, tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path / "ad")); monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "ad"))
     from fastapi.testclient import TestClient
     from aaryaai_finance.server import create_app
-    c = TestClient(create_app(tmp_path / "boot"))
+    from conftest import local_client
+    c = local_client(create_app(tmp_path / "boot"))
     c.post("/setup/apply", json={"data_dir": str(tmp_path / "d"), "countries": ["IN"], "base_currency": "INR",
                                  "ai": {"provider": "ollama", "endpoint": url, "model": "fake"}})
     assert c.get("/chat/meta").json()["ready"] is True

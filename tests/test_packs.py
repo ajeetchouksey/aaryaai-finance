@@ -48,3 +48,38 @@ def test_examples_are_valid():
     assert ts and all("_error" not in t for t in ts)
     s = summarize(ts[0])
     assert s["stages_paid"] == 3 and s["remaining"] == 9500000 - 2850000 and s["projection"]
+
+
+def test_unsafe_or_broken_rules_are_refused():
+    from aaryaai_finance.rules.engine import pattern_problem, check_rule
+    for bad in [r"(a+)+$", r"(\w|\d)*x", r"((a)|b)+", r"(?:\s*\d)+", "(", "x" * 400]:
+        assert pattern_problem(bad), bad
+    for ok in [r"Invoice No\.?\s*(\d+)", r"([A-Z]{2,3}\d{7,8})", r"(ab){2,}", r"(x[+*])+"]:
+        assert pattern_problem(ok) is None, ok
+    assert check_rule({"id": "r", "match": {"text_any": ["a"]}, "route": {"folder": "../../etc"}})
+    assert check_rule({"id": "r", "match": {"text_any": ["a"]}, "confidence": 3})
+    assert check_rule({"id": "r", "match": {}})
+
+
+def test_user_pack_problems_are_reported_and_isolated(tmp_path):
+    from aaryaai_finance.config import Settings
+    from aaryaai_finance.packs import available_packs
+    from aaryaai_finance.context import Ctx
+    s = Settings(tmp_path / "d")
+    (s.packs_dir / "FR").mkdir(parents=True)
+    (s.packs_dir / "FR" / "pack.yaml").write_text(
+        "code: FR\nname: France\ncurrency: EUR\n"
+        "calculators: [{id: x, engine: does_not_exist}]\n"
+        "deadlines: [{id: d1, title: T, due: '{year}-05-31', if: nope}]\n"
+        "document_rules: [{id: fr_bad, match: {text_any: [facture]}, extract: [{name: n, pattern: '(a+)+'}]}]\n", encoding="utf-8")
+    (s.packs_dir / "XX").mkdir()
+    (s.packs_dir / "XX" / "pack.yaml").write_text("code: [unclosed", encoding="utf-8")
+    packs = available_packs(s)
+    errs = " | ".join(packs["FR"]["_errors"])
+    assert "unknown engine" in errs and "doesn't match any question" in errs and "freeze" in errs
+    assert packs["FR"]["calculators"] == []                   # broken calculator dropped, pack still usable
+    assert "!XX" in packs and "YAML syntax" in packs["!XX"]["_errors"][0]
+    s.config["countries"] = ["FR"]; s.save()
+    c = Ctx(s)
+    assert "fr_bad" not in [r["id"] for r in c.rules.document_rules]
+    assert any("fr_bad" in e for e in c.rules.errors)

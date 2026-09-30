@@ -2,14 +2,16 @@
 from __future__ import annotations
 
 import base64
+import re
+import secrets
 import json
 import os
 import shutil
 from datetime import date, datetime
 from pathlib import Path
 
-from fastapi import Body, FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
@@ -18,7 +20,8 @@ from .ai.providers import PROVIDERS, ProviderError, make_provider
 from .config import Settings, default_data_dir, remember_data_dir, remembered_data_dir, SECRET_KEYS
 from .context import Ctx
 from .core import ledger, planning, trackers as trk, trading
-from .core.db import TABLES
+from .core.db import IntegrityProblem
+from . import model as M
 from .packs import available_packs, pack_summary
 from .rules.engine import library, safe_target, same_place, unique_path, validate_rules_yaml
 
@@ -26,12 +29,122 @@ WEB = Path(__file__).parent / "web"
 COMMON_CURRENCIES = ["EUR", "INR", "USD", "GBP", "CHF", "SGD", "AED", "AUD", "CAD", "JPY", "SEK", "NOK", "DKK", "PLN", "CZK"]
 
 
-def create_app(data_dir: Path | None = None) -> FastAPI:
-    app = FastAPI(title="aaryaai-finance", version=__version__)
+LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+PUBLIC_PATHS = ("/static/",)
+CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+       "font-src 'self'; connect-src 'self'; frame-src 'self' blob:; object-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+
+
+def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None) -> FastAPI:
+    app = FastAPI(title="aaryaai-finance", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
+    token = secrets.token_urlsafe(32)
+    hosts = LOOPBACK | set(extra_hosts or ())
+
+    @app.middleware("http")
+    async def guard(request: Request, call_next):
+        """Only this computer's browser tab may use the API.
+        Host check: blocks DNS-rebinding (a web page pointing its own domain at 127.0.0.1).
+        Origin check: blocks other web pages from sending requests here.
+        Session token: created at start-up, only handed to the app's own page."""
+        host = request.url.hostname or ""
+        if host not in hosts:
+            return JSONResponse({"detail": "Blocked: this app only answers on 127.0.0.1 / localhost."}, status_code=403)
+        origin = request.headers.get("origin")
+        if origin and origin != "null":
+            from urllib.parse import urlsplit
+            o = urlsplit(origin)
+            if o.hostname not in hosts or (o.port or 80) != (request.url.port or 80):
+                return JSONResponse({"detail": "Blocked: request from another website."}, status_code=403)
+        elif origin == "null" and request.method not in ("GET", "HEAD"):
+            return JSONResponse({"detail": "Blocked: request from an unknown origin."}, status_code=403)
+        path = request.url.path
+        if path != "/" and not path.startswith(PUBLIC_PATHS):
+            given = request.headers.get("x-session-token") or request.query_params.get("t")
+            if not given or not secrets.compare_digest(given, token):
+                return JSONResponse({"detail": "Session expired — reload the page."}, status_code=401)
+        resp = await call_next(request)
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        resp.headers["Referrer-Policy"] = "no-referrer"
+        resp.headers["X-Frame-Options"] = "DENY"
+        resp.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        resp.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        resp.headers["Content-Security-Policy"] = CSP
+        if not path.startswith("/static/"):
+            resp.headers["Cache-Control"] = "no-store"
+        return resp
     state = {"ctx": Ctx(Settings(data_dir or remembered_data_dir() or default_data_dir())), "review": {}, "explicit_dir": data_dir is not None}
 
     def ctx() -> Ctx:
         return state["ctx"]
+
+    @app.exception_handler(IntegrityProblem)
+    async def _integrity(_req, exc: IntegrityProblem):
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+
+    def _history(c: Ctx) -> list[dict]:
+        out = []
+        for h in c.db.snapshots():
+            v = h["net_worth"]
+            cur = h.get("currency") or c.base
+            if cur != c.base:
+                try:
+                    v = c.conv(v, cur)
+                except ValueError:
+                    continue
+            out.append({"day": h["day"], "net_worth": v})
+        return out
+
+    # ======================= data model =======================
+    @app.get("/model")
+    def get_model():
+        c = ctx()
+        mp = c.settings.model_path
+        return {**M.public(c.model), "errors": c.model_errors, "user_model_path": str(mp),
+                "user_model_text": mp.read_text(encoding="utf-8") if mp.exists() else "",
+                "last_sync": c.db.sync_report, "secrets_moved_to_keychain": c.secrets_moved,
+                "rule_errors": c.rules.errors, "backups_dir": str(c.settings.backups_dir)}
+
+    @app.post("/model/user")
+    def save_user_model(p: dict = Body(...)):
+        c = ctx()
+        text = p.get("text", "")
+        try:
+            user = json.loads(text) if text.strip() else None
+        except ValueError as e:
+            raise HTTPException(400, f"Not valid JSON: {e}")
+        pack_models = [(f"{pk.get('name', code)} pack", pk["model"]) for code, pk in c.packs.items() if pk.get("model")]
+        new_model, errs = M.build(pack_models, user)
+        if errs:
+            raise HTTPException(400, "; ".join(errs[:6]))
+        try:
+            M.dry_run(c.settings.db_path, new_model)          # try it on a copy first; the real file is untouched
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(400, f"Can't apply this model to your data: {M.friendly_error(e)} — nothing was changed")
+        if user is None:
+            if c.settings.model_path.exists():
+                c.settings.model_path.rename(c.settings.model_path.with_suffix(f".json.off-{datetime.now():%Y%m%d%H%M%S}"))
+        else:
+            c.settings.model_path.write_text(json.dumps(user, indent=2, ensure_ascii=False), encoding="utf-8")
+        c.reload()
+        return {"ok": True, "sync": c.db.sync_report}
+
+    @app.get("/data/export")
+    def export_data():
+        c = ctx()
+        body = json.dumps(c.db.export(), ensure_ascii=False, indent=1, default=str)
+        name = f"aaryaai-finance-export-{date.today().isoformat()}.json"
+        return StreamingResponse(iter([body]), media_type="application/json",
+                                 headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+    @app.post("/data/import")
+    def import_data(p: dict = Body(...)):
+        c = ctx()
+        need(p.get("confirm") == "REPLACE", "Type REPLACE to confirm")
+        c.settings.backups_dir.mkdir(parents=True, exist_ok=True)
+        b = c.settings.backups_dir / f"finance-before-import-{datetime.now():%Y%m%d-%H%M%S}.db"
+        shutil.copy2(c.settings.db_path, b)
+        counts = c.db.import_all(p.get("data") or {})
+        return {"ok": True, "imported": counts, "backup": str(b)}
 
     def need(cond, msg, code=400):
         if not cond:
@@ -116,6 +229,7 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
 
     @app.post("/config/secret/clear")
     def clear_secret(p: dict = Body(...)):
+        need(p.get("key") in SECRET_KEYS, "Unknown key")
         ctx().settings.set_secret(p["key"], "")
         return {"ok": True}
 
@@ -140,12 +254,12 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     # ======================= generic tables =======================
     @app.get("/api/{table}")
     def list_rows(table: str):
-        need(table in TABLES, "Unknown table", 404)
-        return ctx().db.list(table, "due IS NULL, due" if table == "calendar" else "id")
+        need(table in ctx().db.tables, "Unknown table", 404)
+        return ctx().db.list(table, "due IS NULL, due" if table == "calendar" else None)
 
     @app.post("/api/{table}")
     def save_row(table: str, row: dict = Body(...)):
-        need(table in TABLES and table not in ("documents",), "Unknown table", 404)
+        need(table in ctx().db.tables and table not in ("documents",), "Unknown table", 404)
         c = ctx()
         if table == "items":
             row["updated"] = date.today().isoformat()
@@ -164,7 +278,7 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
 
     @app.delete("/api/{table}/{row_id}")
     def delete_row(table: str, row_id: int):
-        need(table in TABLES, "Unknown table", 404)
+        need(table in ctx().db.tables, "Unknown table", 404)
         ctx().db.delete(table, row_id)
         return {"ok": True}
 
@@ -200,10 +314,10 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         c = ctx()
         ledger.materialize_recurring(c.db)
         nw = c.net_worth()
-        c.db.snapshot({"net_worth_eur": nw["net_worth"], "assets_eur": nw["assets"], "liabilities_eur": nw["liabilities"]})
+        c.db.snapshot(nw, c.base)
         cal = [d for d in c.calendar() if d["status"] == "open" and d["due"]]
         return {"net_worth": nw, "base": c.base, "rates": c.rates, "currencies": c.settings.currencies,
-                "history": [{"day": h["day"], "net_worth": h["net_worth_eur"]} for h in c.db.snapshots()],
+                "history": _history(c),
                 "trackers": [trk.summarize(t) for t in c.trackers], "open_deadlines": cal[:6],
                 "packs": {k: pack_summary(v) for k, v in c.packs.items()}}
 
@@ -404,7 +518,8 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     @app.post("/docs/file")
     def docs_file(p: dict = Body(...)):
         c = ctx()
-        sha, name = p["sha256"], Path(p["filename"]).name
+        sha, name = str(p.get("sha256", "")), Path(str(p.get("filename", ""))).name
+        need(re.fullmatch(r"[0-9a-f]{64}", sha), "Upload the file again — its reference is invalid.")
         src = next(c.settings.inbox_dir.glob(sha + ".*"), None) if c.settings.inbox_dir.exists() else None
         need(src, "Upload expired — please add the file again.")
         root = c.settings.documents_root
@@ -627,6 +742,7 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
 
     @app.get("/")
     def index():
-        return FileResponse(WEB / "index.html")
+        html = (WEB / "index.html").read_text(encoding="utf-8")
+        return HTMLResponse(html.replace("<head>", f'<head>\n<meta name="session-token" content="{token}">', 1))
 
     return app

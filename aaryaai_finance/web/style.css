@@ -573,3 +573,13 @@ textarea.code{font:13px/1.5 var(--num);background:rgba(8,14,26,.7);min-height:26
 @media (max-width:760px){.calcgrid{grid-template-columns:1fr}.calc .form{grid-template-columns:1fr}.wiz-card{padding:20px 16px}.ledger-cols.n3{grid-template-columns:1fr 1fr}}
 
 .qlist input[type=checkbox], .packpick input { flex: none; }
+
+.span2{grid-column:1/-1}
+.probs{margin:6px 0 0;padding-left:18px;color:var(--gold);font-size:13.5px}
+.probs li{margin:2px 0}
+.okline{color:var(--good);font-size:13.5px}
+.fieldhint{display:block;font-size:12px;color:var(--ink3,#94a3b8);margin-top:3px;font-weight:400}
+.custom-tag{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--lilac);margin-left:6px}
+a.btn,label.btn{display:inline-flex;align-items:center;background:var(--indigo);color:#fff;border-radius:8px;padding:5px 11px;font:600 13px var(--body);text-decoration:none;box-shadow:0 4px 14px -4px rgba(91,75,214,.6)}
+a.btn:hover{background:var(--indigo-deep)}
+label.btn.ghost{background:rgba(148,163,184,.06);color:var(--ink);border:1px solid var(--line2);box-shadow:none}

@@ -11,14 +11,15 @@ from fastapi.testclient import TestClient  # noqa: E402
 from aaryaai_finance.ai.providers import to_openai_messages, to_openai_tools  # noqa: E402
 from aaryaai_finance.core import ledger  # noqa: E402
 from aaryaai_finance.rules.engine import RuleSet, validate_rules_yaml, _render_text  # noqa: E402
-from aaryaai_finance.server import create_app  # noqa: E402
+from aaryaai_finance.server import create_app
+from conftest import local_client  # noqa: E402
 
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "appdata"))
-    c = TestClient(create_app(tmp_path / "boot"))
+    c = local_client(create_app(tmp_path / "boot"))
     r = c.post("/setup/apply", json={"data_dir": str(tmp_path / "data"), "name": "Test User", "countries": ["DE", "IN"],
                                     "base_currency": "EUR", "answers": {"in_nri": True, "de_mandatory_filing": False}})
     assert r.status_code == 200, r.text

@@ -2,11 +2,21 @@
 // comes from the server (/config, packs, rules, trackers); nothing is hard-coded here.
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+// Session token: the server hands it only to this page; every API call must carry it.
+const TOKEN = document.querySelector('meta[name="session-token"]')?.content || "";
+const HDRS = () => ({ "Content-Type": "application/json", "X-Session-Token": TOKEN });
+const withToken = (url) => url + (url.includes("?") ? "&" : "?") + "t=" + encodeURIComponent(TOKEN);
+function sessionExpired(r) {
+  if (r.status !== 401) return false;
+  if (!sessionStorage.getItem("afReloaded")) { try { sessionStorage.setItem("afReloaded", "1"); } catch (e) { } location.reload(); }
+  return true;
+}
 const api = async (url, opts = {}) => {
-  const r = await fetch(url, { headers: { "Content-Type": "application/json" }, ...opts,
-    body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const r = await fetch(url, { ...opts, headers: HDRS(), body: opts.body ? JSON.stringify(opts.body) : undefined });
   const j = await r.json().catch(() => ({}));
+  if (sessionExpired(r)) throw new Error("The app was restarted — reloading…");
   if (!r.ok) throw new Error(j.detail || r.statusText);
+  try { sessionStorage.removeItem("afReloaded"); } catch (e) { }
   return j;
 };
 // ---------------- app-wide config ----------------
@@ -42,8 +52,9 @@ const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v
 const CCY_COL = ["#38bdf8", "#a99bff", "#34d399", "#fbbf24", "#f472b6"];
 const ccyColor = (c) => CCY_COL[Math.max(0, CFG.currencies.indexOf(c)) % CCY_COL.length];
 
+let MODEL = { entities: {} };
 async function loadConfig() {
-  CFG = await api("/config");
+  [CFG, MODEL] = await Promise.all([api("/config"), api("/model")]);
   const others = CFG.currencies.filter((c) => c !== BASE());
   const r = CFG.rates || {};
   const pill = others.length && r[others[0]] ? [`1 ${SYM[BASE()] || BASE()} =`, money(r[others[0]], others[0], 2)] : ["base", BASE()];
@@ -99,12 +110,14 @@ $$("#tabs button").forEach((b) => b.onclick = () => {
 // ---------------- generic edit dialog ----------------
 function dialog(title, fields, row, onSave, onDelete) {
   const f = $("#dlgForm");
-  f.innerHTML = `<h3>${title}</h3>` + fields.map(([k, label, type = "text", opts]) => {
+  f.innerHTML = `<h3>${title}</h3>` + fields.map(([k, label, type = "text", opts, extra = {}]) => {
     const v = row[k] ?? "";
-    if (type === "select") return `<label>${label}<select name="${k}">${opts.map((o) => `<option ${o == v ? "selected" : ""}>${o}</option>`).join("")}</select></label>`;
-    if (type === "checkbox") return `<label><input type="checkbox" name="${k}" ${v ? "checked" : ""}> ${label}</label>`;
-    if (type === "textarea") return `<label>${label}<textarea name="${k}" rows="3">${esc(v)}</textarea></label>`;
-    return `<label>${label}<input name="${k}" type="${type}" step="any" value="${esc(v)}"></label>`;
+    const lab = esc(label) + (extra.custom ? `<span class="custom-tag">${esc(extra.source || "custom")}</span>` : "");
+    const hint = extra.help ? `<span class="fieldhint">${esc(extra.help)}</span>` : "";
+    if (type === "select") return `<label>${lab}<select name="${k}">${opts.map((o) => { const [val, txt] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(val)}" ${String(val) === String(v) ? "selected" : ""}>${esc(txt)}</option>`; }).join("")}</select>${hint}</label>`;
+    if (type === "checkbox") return `<label><input type="checkbox" name="${k}" ${v ? "checked" : ""}> ${lab}${hint}</label>`;
+    if (type === "textarea") return `<label>${lab}<textarea name="${k}" rows="3">${esc(v)}</textarea>${hint}</label>`;
+    return `<label>${lab}<input name="${k}" type="${type}" step="any" value="${esc(v)}">${hint}</label>`;
   }).join("") + `<div style="display:flex;gap:8px;justify-content:space-between;margin-top:8px">
     ${onDelete && row.id ? '<button type="button" class="ghost" id="dlgDel">Delete</button>' : "<span></span>"}
     <span style="display:flex;gap:6px"><button type="button" class="ghost" id="dlgCancel">Cancel</button><button>Save</button></span></div>`;
@@ -122,6 +135,54 @@ function dialog(title, fields, row, onSave, onDelete) {
   };
 }
 
+
+// ---------------- model-driven form fields ----------------
+// Turns a field from the JSON model into a dialog field. Extra fields added by a country pack or by you
+// (Settings → Custom fields) appear in the matching dialogs automatically.
+function modelField(name, f, refs = {}) {
+  const label = f.label || name.replace(/_/g, " ");
+  const x = { custom: f.custom, source: f.source, help: f.help };
+  switch (f.type) {
+    case "enum": return [name, label, "select", [["", "—"], ...f.values.map((v) => [v, v])], x];
+    case "bool": return [name, label, "checkbox", null, x];
+    case "money": case "number": case "int": return [name, label, "number", null, x];
+    case "date": return [name, label, "date", null, x];
+    case "currency": return [name, label, "select", CFG.currencies, x];
+    case "country": return [name, label, "select", ["", ...(CFG.countries || [])], x];
+    case "ref": return [name, label, "select", [["", "—"], ...(refs[f.to] || []).map((r) => [r.id, r.name || r.title || `#${r.id}`])], x];
+    default: return [name, label, (f.type === "text" && /note|detail|description/.test(name)) ? "textarea" : "text", null, x];
+  }
+}
+// A country pack's extra fields only show on records of that country (e.g. NRE/NRO only on Indian accounts).
+function fieldForCountry(x, code) {
+  const p = (CFG.all_packs || CFG.packs || []).find((pk) => x.source === `${pk.name} pack`);
+  return !p || !code || p.code === code;
+}
+const customFields = (entity) => Object.entries(MODEL.entities[entity]?.fields || {}).filter(([, f]) => f.custom).map(([k, f]) => modelField(k, f));
+
+// ---------------- your own record types (from model.json) ----------------
+window.openRecords = async (entity) => {
+  const ent = MODEL.entities[entity]; if (!ent) return;
+  const refs = {};
+  for (const f of Object.values(ent.fields)) if (f.type === "ref" && !refs[f.to]) refs[f.to] = await api("/api/" + f.to).catch(() => []);
+  const rows = await api("/api/" + entity);
+  const cols = Object.entries(ent.fields).slice(0, 5);
+  const show = (f, v) => f.type === "ref" ? esc((refs[f.to] || []).find((r) => r.id === v)?.name || (v ? `#${v}` : "")) : f.type === "money" && v != null ? money(v, rows.currency) : f.type === "bool" ? (v ? "✓" : "") : esc(v ?? "");
+  $("#recordsCard").hidden = false;
+  $("#recTitle").innerHTML = `${esc(ent.label)} <span class="hint" style="font-size:13px">${rows.length} · defined in ${esc(ent.source)}</span>`;
+  $("#setRecords").innerHTML = `<div class="tablewrap"><table><thead><tr>${cols.map(([k, f]) => `<th>${esc(f.label || k)}</th>`).join("")}</tr></thead><tbody>
+    ${rows.map((r) => `<tr class="click" onclick="editRecord('${entity}', ${r.id})">${cols.map(([k, f]) => `<td>${show(f, r[k])}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${cols.length}" class="hint">Nothing yet.</td></tr>`}</tbody></table></div>
+    <div style="display:flex;gap:8px;margin-top:10px"><button class="sm" onclick="editRecord('${entity}')">＋ Add ${esc(ent.label.toLowerCase())}</button><button class="sm ghost" onclick="$('#recordsCard').hidden=true">Close</button></div>`;
+  window._recs = { entity, rows, refs };
+  $("#recordsCard").scrollIntoView({ behavior: "smooth", block: "start" });
+};
+window.editRecord = (entity, id) => {
+  const ent = MODEL.entities[entity], st = window._recs;
+  const row = st.rows.find((r) => r.id === id) || Object.fromEntries(Object.entries(ent.fields).filter(([, f]) => "default" in f).map(([k, f]) => [k, f.default]));
+  dialog(`${id ? "Edit" : "Add"} ${esc(ent.label.toLowerCase())}`, Object.entries(ent.fields).map(([k, f]) => modelField(k, f, st.refs)), row,
+    async (r) => { await api("/api/" + entity, { method: "POST", body: r }); openRecords(entity); },
+    async (i) => { await api(`/api/${entity}/${i}`, { method: "DELETE" }); openRecords(entity); });
+};
 
 // ---------------- "Ask the assistant" shortcut ----------------
 window.askClaude = (q) => {
@@ -394,7 +455,7 @@ window.editItem = (id) => {
   dialog(id ? "Edit asset or debt" : "Add an asset or debt", [["name", "Name"], ["kind", "Own or owe?", "select", ["asset", "liability"]],
     ["category", "Type", "select", ITEM_CATS], ["amount", "Current value / balance", "number"],
     ["currency", "Currency", "select", CFG.currencies], ["country", "Country", "select", ["", ...(CFG.countries || [])]],
-    ["liquid", "Liquid (reachable within a week)", "checkbox"], ["note", "Note", "textarea"]], row,
+    ["liquid", "Liquid (reachable within a week)", "checkbox"], ["note", "Note", "textarea"], ...customFields("items")], row,
     async (r) => { await api("/api/items", { method: "POST", body: r }); loaders.position(); },
     async (i) => { await api("/api/items/" + i, { method: "DELETE" }); loaders.position(); });
 };
@@ -441,7 +502,7 @@ window.editGoal = (id) => {
     ["currency", "Currency", "select", CFG.currencies], ["target_date", "Needed by", "date"],
     ["saved", "Already set aside", "number"], ["monthly", "Saving per month", "number"],
     ["annual_return", "Expected growth per year (0.05 = 5%)", "number"], ["inflation", "Inflation per year (0.02 = 2%)", "number"],
-    ["priority", "Priority (1 = must, 3 = nice)", "select", [1, 2, 3]], ["note", "Note", "textarea"]], row,
+    ["priority", "Priority (1 = must, 3 = nice)", "select", [1, 2, 3]], ["note", "Note", "textarea"], ...customFields("goals")], row,
     async (r) => { await api("/api/goals", { method: "POST", body: r }); loaders.goals(); },
     async (i) => { await api("/api/goals/" + i, { method: "DELETE" }); loaders.goals(); });
 };
@@ -759,7 +820,7 @@ loaders.settings = async () => {
       ${k === "azure_openai" || k === "ollama" ? `<label>Endpoint <input name="endpoint" value="${esc(ai.endpoint || (k === "ollama" ? "http://localhost:11434" : ""))}"></label>` : ""}
       ${k === "azure_openai" ? `<div class="row2"><label>Deployment <input name="deployment" value="${esc(ai.deployment || "")}"></label><label>API version <input name="api_version" value="${esc(ai.api_version || "2024-10-21")}"></label></div>` : ""}
       ${k !== "none" ? `<label>Model ${v.models ? `<select name="model">${v.models.map((m) => `<option ${m === (ai.model || v.default_model) ? "selected" : ""}>${m}</option>`).join("")}</select>` : `<input name="model" value="${esc(ai.model || "")}">`}</label>` : ""}
-      ${secretKey ? `<label>${k === "github_models" ? "GitHub token" : "API key"} <input name="secret" type="password" placeholder="${c.secrets_set[secretKey] ? "saved — leave blank to keep" : "paste here"}"></label>` : ""}
+      ${secretKey ? `<label>${k === "github_models" ? "GitHub token" : "API key"} <input name="secret" type="password" placeholder="${c.secrets_set[secretKey] ? "saved — leave blank to keep" : "paste here"}"><span class="fieldhint">${c.secrets_storage === "keychain" ? "🔒 Stored in your system keychain (Windows Credential Manager / macOS Keychain), not in a file." : "Stored in secrets.json in your data folder (no system keychain found)."}</span></label>` : ""}
       ${k === "anthropic" ? `<label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" name="web" ${ai.web_search !== false ? "checked" : ""}> Allow web search for current tax rules</label>` : ""}
       <div style="display:flex;gap:8px"><button>Save</button>${k !== "none" ? `<button type="button" class="ghost" id="aiTest">Test connection</button>` : ""}</div>`;
     $("#setAI").provider.onchange = (e) => drawAI(e.target.value);
@@ -773,9 +834,61 @@ loaders.settings = async () => {
     if ($("#aiTest")) $("#aiTest").onclick = async () => { $("#aiMsg").textContent = "Testing…"; try { const r = await api("/ai/test", { method: "POST", body: {} }); $("#aiMsg").innerHTML = `<span class="pos">✓ Connected:</span> ${esc(r.reply)}`; } catch (e) { $("#aiMsg").innerHTML = `<span class="err">${esc(e.message)}</span>`; } };
   };
   drawAI(ai.provider || "none");
+  const m = await api("/model");
+  MODEL = m;
+  const problems = [...m.errors.map((e) => "Model: " + e), ...m.rule_errors.map((e) => "Rules: " + e),
+    ...(c.all_packs || []).flatMap((p) => (p.errors || []).map((e) => `${p.flag || ""} ${p.name} pack: ${e}`))];
+  const sy = m.last_sync || {};
+  const userEnts = Object.entries(m.entities).filter(([, e]) => e.user_defined);
   $("#setData").innerHTML = `<p style="margin-top:0">Data folder:<br><code>${esc(c.data_dir)}</code></p>
-    <p class="hint">Back up this folder to keep everything: <code>config.yaml</code>, <code>finance.db</code>, your rules and trackers. API keys are in <code>secrets.json</code> — don't share that file.</p>
-    <button class="sm ghost" onclick="openWizard()">Use a different data folder</button>`;
+    <p class="hint">Back up this folder to keep everything. Automatic backups before any database change go to <code>backups/</code>.
+      API keys: ${c.secrets_storage === "keychain" ? "in your system keychain" : "in <code>secrets.json</code> — don't share that file"}.</p>
+    <p class="hint" style="margin:6px 0">Database schema v${esc(m.version)} · ${Object.keys(m.entities).length} record types, links between them checked.
+      ${sy.rebuilt?.length ? `<br>Updated at start-up (${sy.rebuilt.length} tables) — backup: <code>${esc(sy.backup || "")}</code>` : ""}
+      ${(sy.repaired || []).map((r) => `<br>Repaired: ${esc(r)}`).join("")}
+      ${(m.secrets_moved_to_keychain || []).length ? `<br>🔒 Moved ${m.secrets_moved_to_keychain.length} API key(s) from the file into your keychain.` : ""}</p>
+    ${problems.length ? `<ul class="probs">${problems.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>` : `<p class="okline">✓ All packs, rules and the model check out.</p>`}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <a class="btn sm" href="${withToken("/data/export")}" download>Export everything (JSON)</a>
+      <label class="btn sm ghost" style="cursor:pointer">Import from JSON…<input type="file" id="importFile" accept=".json,application/json" hidden></label>
+      <button class="sm ghost" onclick="openWizard()">Use a different data folder</button></div>
+    ${userEnts.length ? `<p style="margin:12px 0 4px"><b>Your record types</b></p><div style="display:flex;gap:6px;flex-wrap:wrap">${userEnts.map(([k, e]) => `<button class="sm ghost" onclick="openRecords('${k}')">${esc(e.label)}</button>`).join("")}</div>` : ""}`;
+  $("#importFile").onchange = async (e) => {
+    const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+    let data; try { data = JSON.parse(await file.text()); } catch (err) { toast("That file isn't valid JSON"); return; }
+    const n = Object.values(data.tables || {}).reduce((a, r) => a + (r.length || 0), 0);
+    dialog("Replace all data?", [["confirm", `This replaces everything in the app with ${n} records from ${file.name} (exported ${data.exported || "?"}). A backup of your current data is made first. Type REPLACE to continue.`]], {},
+      async (r) => { const res = await api("/data/import", { method: "POST", body: { data, confirm: r.confirm.trim() } }); toast("Imported — backup saved"); await loadConfig(); loaders.settings(); return res; });
+  };
+  const EXAMPLE_MODEL = `{
+  "extends": {
+    "accounts": { "fields": { "iban_last4": { "type": "text", "label": "IBAN (last 4 digits)" } } },
+    "goals": { "fields": { "for_whom": { "type": "enum", "values": ["Family", "Me", "Child"], "label": "For whom" } } }
+  },
+  "entities": {
+    "policies": {
+      "label": "Insurance policy",
+      "fields": {
+        "name": { "type": "text", "required": true, "label": "Policy" },
+        "insurer": { "type": "text", "label": "Insurer" },
+        "premium": { "type": "money", "label": "Premium per year" },
+        "renews_on": { "type": "date", "label": "Renews on" },
+        "paid_from": { "type": "ref", "to": "accounts", "on_delete": "set_null", "label": "Paid from account" }
+      }
+    }
+  }
+}`;
+  $("#setModel").innerHTML = `<p class="hint" style="margin-top:0">Add your own fields to accounts, goals, assets… or whole new record types (insurance policies, loans, subscriptions). Types: text, number, money, int, bool, date, enum, ref, currency, country. Links (<code>ref</code>) are checked like the built-in ones.</p>
+    <textarea id="modelText" class="code" rows="12" spellcheck="false" placeholder="{ }">${esc(m.user_model_text)}</textarea>
+    <p id="modelMsg" class="hint"></p>
+    <div style="display:flex;gap:8px"><button class="sm" id="modelSave">Save &amp; apply</button><button class="sm ghost" id="modelEx">Insert an example</button></div>`;
+  $("#modelEx").onclick = () => { if (!$("#modelText").value.trim()) $("#modelText").value = EXAMPLE_MODEL; else toast("Clear the box first, or edit it by hand"); };
+  $("#modelSave").onclick = async () => {
+    try { const r = await api("/model/user", { method: "POST", body: { text: $("#modelText").value } });
+      toast(`Saved${r.sync.created.length ? " — new record type: " + r.sync.created.join(", ") : ""}${r.sync.backup ? " (backup made first)" : ""}`);
+      await loadConfig(); loaders.settings();
+    } catch (e) { $("#modelMsg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  };
   const t = await api("/tax/calculators");
   const gl = { "Net worth": "What you own minus what you owe.", "Liquid": "Money you can get within days without a big loss.", "Inflation": "Prices rising over time.",
     "CAGR": "Average yearly growth rate.", "Drawdown": "A fall from a previous high.", "ETF": "A cheap fund traded on an exchange that tracks an index.", ...t.glossary };
@@ -846,7 +959,7 @@ async function send() {
   let buf = "", changed = false, pending = false;
   const render = () => { if (pending) return; pending = true; requestAnimationFrame(() => { txtEl.innerHTML = md(buf); pending = false; scrollDown(); }); };
   try {
-    const r = await fetch("/chat/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: CHAT_ID, text }) });
+    const r = await fetch("/chat/send", { method: "POST", headers: HDRS(), body: JSON.stringify({ chat_id: CHAT_ID, text }) });
     if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.detail || r.statusText); }
     const reader = r.body.getReader(), dec = new TextDecoder();
     let pend = "";
@@ -991,7 +1104,8 @@ window.editAccount = (id, country) => {
   dialog(id ? "Edit account" : `Add ${pk.flag || ""} ${esc(pk.name || "")} account`, [["name", "Account name (e.g. Main current account)"], ["institution", "Bank / broker"],
     ["country", "Country", "select", ["", ...(CFG.countries || [])]], ["currency", "Currency", "select", CFG.currencies], ["type", "Type", "select", MONEY.meta.account_types],
     ["opening_balance", "Balance on the start date", "number"], ["opening_date", "Start date", "date"],
-    ["liquid", "Cash I can reach within a week", "checkbox"], ["in_networth", "Count in net worth", "checkbox"], ["archived", "Hide (closed account)", "checkbox"], ["note", "Note", "textarea"]], row,
+    ["liquid", "Cash I can reach within a week", "checkbox"], ["in_networth", "Count in net worth", "checkbox"], ["archived", "Hide (closed account)", "checkbox"], ["note", "Note", "textarea"],
+    ...customFields("accounts").filter(([, , , , x]) => fieldForCountry(x, row.country || country))], row,
     async (r) => { if (!r.name) throw new Error("Give the account a name"); await api("/api/accounts", { method: "POST", body: r }); loaders.money(); },
     async (i) => { await api("/api/accounts/" + i, { method: "DELETE" }); loaders.money(); });
 };
@@ -1064,7 +1178,7 @@ function drawLibrary() {
   const rows = DOCS.lib.filter((d) => (!DOCS.cat || d.category === DOCS.cat) && (!q || d.path.toLowerCase().includes(q)));
   $("#libCount").textContent = `${rows.length} file${rows.length === 1 ? "" : "s"}`;
   $("#libTbl").innerHTML = `<thead><tr><th>File</th><th>Category</th><th>Folder</th><th class="n">Size</th></tr></thead><tbody>` + rows.slice(0, 300).map((d) => `<tr>
-    <td><a href="/docs/open?path=${encodeURIComponent(d.path)}" target="_blank" rel="noopener" style="color:var(--ink)">${esc(d.name)}</a>${d.logged ? ` <span class="rep">filed here</span>` : ""}</td>
+    <td><a href="${withToken("/docs/open?path=" + encodeURIComponent(d.path))}" target="_blank" rel="noopener" style="color:var(--ink)">${esc(d.name)}</a>${d.logged ? ` <span class="rep">filed here</span>` : ""}</td>
     <td data-l="Category"><span class="catdot" style="background:${CAT_COLOR[d.category] || "#64748b"}"></span>${esc(d.category)}</td>
     <td data-l="Folder" class="muted" style="font-size:12.5px">${esc(d.folder)}</td><td class="n" data-l="Size">${(d.size / 1024).toFixed(0)} KB</td></tr>`).join("") + "</tbody>";
 }

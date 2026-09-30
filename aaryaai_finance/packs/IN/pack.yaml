@@ -173,3 +173,14 @@ glossary:
   TDS: "Tax deducted at source — the payer withholds tax and deposits it with the government."
   "26QB / Form 141": "The form a property buyer uses to deposit 1% TDS. 26QB until March 2026, Form 141 from April 2026."
   DTAA: "A double tax treaty — decides which country taxes what and credits tax paid in the other."
+
+# Extra fields this country adds to the data model (stored with each record; see CONTRIBUTING.md).
+model:
+  extends:
+    accounts:
+      fields:
+        in_account_kind:
+          type: enum
+          values: [Resident, NRE, NRO, FCNR]
+          label: "Indian account type (NRE / NRO / resident)"
+          help: "NRE interest is tax-free in India; NRO interest is taxed (TDS). As an NRI, resident savings accounts must be converted."
