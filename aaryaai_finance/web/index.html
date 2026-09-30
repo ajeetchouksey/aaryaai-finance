@@ -24,11 +24,14 @@
   <symbol id="i-docs" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M12 11v5M9.5 13.5L12 16l2.5-2.5"/></symbol>
   <symbol id="i-rules" viewBox="0 0 24 24"><path d="M4 6h10M4 12h16M4 18h7"/><circle cx="17" cy="6" r="2"/><circle cx="14" cy="18" r="2"/></symbol>
   <symbol id="i-set" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10.9 10.9 0 0112 5c6.4 0 10 7 10 7a17.6 17.6 0 01-3.1 4.1M6.6 6.6C3.9 8.4 2 12 2 12s3.6 7 10 7a10 10 0 005.4-1.6M9.9 9.9a3 3 0 004.2 4.2"/></symbol>
 </svg>
 
 <header class="topbar">
   <div class="brand"><span class="mark" aria-hidden="true"></span><span>aaryaai finance</span></div>
-  <div class="fxpill"><span class="fxlbl"></span> <b class="fxval">—</b></div>
+  <div style="display:flex;gap:8px;align-items:center"><button class="hidebtn" type="button" aria-pressed="false" title="Hide amounts (Alt+H)"><svg><use href="#i-eye"/></svg></button>
+  <div class="fxpill"><span class="fxlbl"></span> <b class="fxval">—</b></div></div>
 </header>
 
 <aside class="side">
@@ -49,6 +52,7 @@
     <button data-tab="settings"><svg><use href="#i-set"/></svg><span>Settings</span></button>
   </nav>
   <div class="side-foot">
+    <button class="hidebtn wide" type="button" aria-pressed="false" title="Hide amounts (Alt+H)"><svg><use href="#i-eye"/></svg><span class="lbl">Hide amounts</span><kbd>Alt H</kbd></button>
     <div class="fxpill"><span><i class="live"></i><span class="fxlbl">rates</span></span> <b class="fxval">—</b></div>
     <div class="by"><span>Part of</span><img src="/static/brand/logo-mono-white.svg" alt="aaryaai"></div>
   </div>

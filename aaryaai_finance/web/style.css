@@ -583,3 +583,11 @@ textarea.code{font:13px/1.5 var(--num);background:rgba(8,14,26,.7);min-height:26
 a.btn,label.btn{display:inline-flex;align-items:center;background:var(--indigo);color:#fff;border-radius:8px;padding:5px 11px;font:600 13px var(--body);text-decoration:none;box-shadow:0 4px 14px -4px rgba(91,75,214,.6)}
 a.btn:hover{background:var(--indigo-deep)}
 label.btn.ghost{background:rgba(148,163,184,.06);color:var(--ink);border:1px solid var(--line2);box-shadow:none}
+/* hide-amounts toggle */
+.hidebtn{margin-left:auto;display:inline-grid;place-items:center;width:32px;height:32px;padding:0;border-radius:9px;background:rgba(148,163,184,.06);border:1px solid var(--line2);box-shadow:none;color:var(--muted)}
+.hidebtn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.hidebtn:hover{background:rgba(169,155,255,.12);color:var(--ink)}
+.hidebtn[aria-pressed="true"]{background:rgba(91,75,214,.28);border-color:var(--indigo);color:#fff}
+.hidebtn.wide{width:100%;height:auto;margin:0 0 10px;padding:8px 12px;display:flex;gap:10px;justify-content:flex-start;white-space:nowrap;text-align:left;font:500 14px var(--body);color:var(--ink2)}
+.hidebtn.wide kbd{margin-left:auto;font:500 10.5px var(--num);color:var(--muted);border:1px solid var(--line2);border-radius:5px;padding:1px 5px}
+.hidebtn.wide[aria-pressed="true"] kbd{color:#e9e5ff;border-color:rgba(233,229,255,.4)}

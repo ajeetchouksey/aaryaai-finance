@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 — 2026-09-30
+
+### Hide amounts
+- One click (the eye button, or **Alt+H**) masks every amount in the app — cards, tables, charts, tooltips, and amounts written inside text such as deadline titles, tracker notes and chat answers. Percentages, dates and exchange rates stay visible, so the screens still make sense.
+- Handy for screen-sharing, presenting or working in public. The choice is remembered on this computer, so the app can open with amounts hidden.
+
 ## 0.2.0 — 2026-09-30
 
 ### Data model in JSON

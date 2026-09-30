@@ -8,6 +8,7 @@
 - **Multi-country, multi-currency.** Countries are *packs* of YAML rules. Germany 🇩🇪 and India 🇮🇳 ship built in; add your own with a template.
 - **Deterministic.** Documents are sorted and deadlines are created by rules — same input, same result, every time. The Rules tab shows exactly which rule fired and why.
 - **Your data model, your way.** Record types, fields and links are defined in JSON; countries and you can add fields or whole new record types (insurance policies, loans…) without code. Links are enforced, and everything exports to JSON.
+- **Hide amounts.** One click or Alt+H masks every figure for screen-sharing; percentages and dates stay visible.
 - **Locked down.** Only the app's own page can talk to it (host, origin and session-token checks), API keys live in your system keychain, and shared rules are validated before use.
 - **AI if you want it.** Plug in **Claude** (Anthropic API), **Azure OpenAI / AI Foundry**, **GitHub Models** or **Ollama** (fully offline). The assistant reads your numbers through tools; it can't see files.
 

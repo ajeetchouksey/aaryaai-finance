@@ -24,7 +24,19 @@ let CFG = { base_currency: "EUR", currencies: ["EUR"], packs: [], rates: {} };
 const BASE = () => CFG.base_currency;
 const LOCALES = { INR: "en-IN", EUR: "de-DE", USD: "en-US", GBP: "en-GB", CHF: "de-CH", JPY: "ja-JP" };
 const SYM = { EUR: "€", INR: "₹", USD: "$", GBP: "£", JPY: "¥", CHF: "CHF ", SGD: "S$", AUD: "A$", CAD: "C$", AED: "AED ", SEK: "kr ", NOK: "kr ", DKK: "kr ", PLN: "zł ", CZK: "Kč " };
+// ---------------- hide amounts (privacy mode) ----------------
+// One switch masks every amount: cards, tables, charts, tooltips, and amounts written inside text (deadline
+// titles, tracker facts, chat answers). Percentages, dates and exchange rates stay visible. Remembered per browser.
+let HIDE = false;
+try { HIDE = localStorage.getItem("afHideAmounts") === "1"; } catch (e) { }
+const MASK = "••••";
+const AMT_RE = /(?:[€₹$£]|\b(?:Rs\.?|EUR|INR|USD|GBP|CHF)\s?)\s?[-−]?\d[\d.,]*(?:\s?(?:k|M|L|Cr|lakh|crore)\b)?|\b\d[\d.,]*\s?(?:€|₹|EUR|INR|USD|lakh|crore|Cr\b)/g;
+const hideAmt = (t) => HIDE ? String(t ?? "").replace(AMT_RE, (m) => { const c = m.match(/[€₹$£]|Rs\.?|EUR|INR|USD|GBP|CHF/)?.[0] || ""; return /^[A-Z]/.test(c) ? (m.startsWith(c) ? c + " " + MASK : MASK + " " + c) : c + MASK; }) : t;
 function money(v, c = BASE(), d) {
+  if (HIDE) return (SYM[c || BASE()] ?? (c || BASE()) + " ") + MASK;
+  return moneyRaw(v, c, d);
+}
+function moneyRaw(v, c = BASE(), d) {
   v = Number(v || 0); c = c || BASE();
   const dec = d ?? (Math.abs(v) < 100 && v % 1 ? 2 : 0);
   const s = Math.abs(v).toLocaleString(LOCALES[c] || "en-GB", { maximumFractionDigits: dec, minimumFractionDigits: dec });
@@ -32,7 +44,7 @@ function money(v, c = BASE(), d) {
 }
 const eur = (v, d) => money(v, BASE(), d);           // "base currency" formatter (legacy name)
 const inr = (v) => money(v, "INR", 0);
-const compact = (v, c = BASE()) => c === "INR" ? (Math.abs(v) >= 1e7 ? (SYM.INR + (v / 1e7).toFixed(2) + " Cr") : SYM.INR + (v / 1e5).toLocaleString("en-IN", { maximumFractionDigits: 1 }) + "L")
+const compact = (v, c = BASE()) => HIDE ? (SYM[c] ?? c + " ") + "•••" : c === "INR" ? (Math.abs(v) >= 1e7 ? (SYM.INR + (v / 1e7).toFixed(2) + " Cr") : SYM.INR + (v / 1e5).toLocaleString("en-IN", { maximumFractionDigits: 1 }) + "L")
   : (SYM[c] ?? c + " ") + (Math.abs(v) >= 1e6 ? (v / 1e6).toFixed(1) + "M" : Math.round(v / 1000) + "k");
 const lakh = (v) => compact(v, "INR");
 const conv = (v, from, to = BASE()) => { const r = CFG.rates || {}; if (from === to) return v; if (!r[from] || !r[to]) return null; return v / r[from] * r[to]; };
@@ -57,7 +69,7 @@ async function loadConfig() {
   [CFG, MODEL] = await Promise.all([api("/config"), api("/model")]);
   const others = CFG.currencies.filter((c) => c !== BASE());
   const r = CFG.rates || {};
-  const pill = others.length && r[others[0]] ? [`1 ${SYM[BASE()] || BASE()} =`, money(r[others[0]], others[0], 2)] : ["base", BASE()];
+  const pill = others.length && r[others[0]] ? [`1 ${SYM[BASE()] || BASE()} =`, moneyRaw(r[others[0]], others[0], 2)] : ["base", BASE()];
   $$(".fxlbl").forEach((e) => e.textContent = pill[0]); $$(".fxval").forEach((e) => e.textContent = pill[1]);
   $("#brandSub").textContent = CFG.packs.map((p) => p.flag).join(" ") + "  local · private";
 }
@@ -97,6 +109,22 @@ function areaGradient(ctx, color) {
 // ---------------- tabs ----------------
 const loaders = {};
 window.go = (tab) => $(`#tabs button[data-tab="${tab}"]`)?.click();
+function setHide(on, quiet) {
+  HIDE = !!on;
+  try { localStorage.setItem("afHideAmounts", HIDE ? "1" : "0"); } catch (e) { }
+  document.body.classList.toggle("amounts-hidden", HIDE);
+  $$(".hidebtn").forEach((b) => { b.setAttribute("aria-pressed", String(HIDE)); b.title = (HIDE ? "Show amounts" : "Hide amounts") + " (Alt+H)";
+    b.querySelector("use").setAttribute("href", HIDE ? "#i-eyeoff" : "#i-eye");
+    const l = b.querySelector(".lbl"); if (l) l.textContent = HIDE ? "Show amounts" : "Hide amounts"; });
+  if (quiet) return;
+  const cur = $("#tabs button.on")?.dataset.tab;
+  if (cur === "chat" && typeof CHAT_ID !== "undefined" && CHAT_ID) openChat(CHAT_ID); else loaders[cur]?.();
+  toast(HIDE ? "Amounts hidden — Alt+H to show" : "Amounts visible");
+}
+window.toggleHide = () => setHide(!HIDE);
+$$(".hidebtn").forEach((b) => b.onclick = toggleHide);
+document.addEventListener("keydown", (e) => { if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyH") { e.preventDefault(); toggleHide(); } });
+setHide(HIDE, true);
 $$("#tabs button").forEach((b) => b.onclick = () => {
   $$("#tabs button").forEach((x) => x.classList.toggle("on", x === b));
   $$(".tab").forEach((t) => t.classList.toggle("on", t.id === b.dataset.tab));
@@ -214,14 +242,14 @@ function timeline(items, { actions = false, compact = false } = {}) {
     const q = JSON.stringify("Explain in simple words what I need to do for: " + c.title + " — and how, step by step.").replace(/'/g, "&#39;");
     return head + `<div class="tl-item ${c.status === "done" ? "done" : ""}" style="--tc:${ccyColor(packFor(c.country)?.currency)}">
       <div class="tl-date" style="border-top:3px solid var(--tc)">${dt ? `<b>${dt.getDate()}</b><span>${MON[dt.getMonth()]}</span>` : `<b>∞</b><span>always</span>`}</div>
-      <div><div class="tl-title">${esc(c.title)}</div>
+      <div><div class="tl-title">${esc(hideAmt(c.title))}</div>
         <div class="tl-meta">${countryTag(c.country)}${c.origin === "yours" ? `<span class="srcbadge yours">yours</span>` : ""}
         ${sev !== "normal" ? `<span class="tag ${sev}">${sev === "critical" ? "Critical" : sev === "high" ? "Important" : "Done"}</span>` : ""}
         ${compact ? countdown(c.due) : ""}</div></div>
       ${actions ? `<div class="tl-actions">${countdown(c.due)}<button class="sm ${c.status === "done" ? "ghost" : ""}" onclick='toggleCal(${JSON.stringify(c.key)}, "${c.status}")'>${c.status === "done" ? "Reopen" : "Mark done"}</button>
         ${c.status !== "done" ? `<button class="sm ghost ask" onclick='askClaude(${q})'>Ask</button>` : ""}
         ${c.origin === "yours" && c.id ? `<button class="sm ghost" onclick="delDeadline(${c.id})">Delete</button>` : ""}</div>` : ""}
-      ${actions && c.detail ? `<details><summary>What to do &amp; why</summary><p>${esc(c.detail)}</p><p class="hint">Source: ${esc(c.source || "")}</p></details>` : ""}
+      ${actions && c.detail ? `<details><summary>What to do &amp; why</summary><p>${esc(hideAmt(c.detail))}</p><p class="hint">Source: ${esc(c.source || "")}</p></details>` : ""}
     </div>`;
   }).join("");
 }
@@ -339,7 +367,7 @@ loaders.position = async () => {
       <ul>${lines[c].slice(0, 4).map(([nm, a]) => `<li style="${i ? "flex-direction:row-reverse" : ""}"><span>${esc(nm.split(" — ")[0])}</span><span>${money(a, c)}</span></li>`).join("") || `<li><span class="muted">Nothing entered yet</span><span></span></li>`}</ul></div>`;
   };
   const r = p.rates || {};
-  const pivot = (c) => `<div class="pivot"><div class="rate"><small>today</small>1 ${SYM[base] || base} = ${r[c] ? money(r[c], c, 2) : "?"}</div></div>`;
+  const pivot = (c) => `<div class="pivot"><div class="rate"><small>today</small>1 ${SYM[base] || base} = ${r[c] ? moneyRaw(r[c], c, 2) : "?"}</div></div>`;
   const colsHtml = ccys.map((c, i) => (i ? pivot(c) : "") + col(c, i)).join("");
   $("#ledger").innerHTML = `
     <div class="ledger-top"><div><div class="eyebrow">Net worth · ${esc(base)}</div><div class="nw">${money(n.net_worth, base)}</div></div>
@@ -379,7 +407,7 @@ function drawAttention(items) {
   const d = daysTo(top.due), more = open.filter((c) => daysTo(c.due) <= 45).length - 1;
   $("#attention").innerHTML = `<div class="attn">
     <div class="urg">${urgencyRing(d)}<div class="c"><div><b>${d}</b><span>days</span></div></div></div>
-    <div class="what"><div class="eyebrow">Needs your attention${top.country ? " · " + esc(countryName(top.country)) : ""}</div><div class="t">${esc(top.title)}</div>
+    <div class="what"><div class="eyebrow">Needs your attention${top.country ? " · " + esc(countryName(top.country)) : ""}</div><div class="t">${esc(hideAmt(top.title))}</div>
       <p class="hint">Due ${new Date(top.due).toLocaleDateString("en-GB", { day: "numeric", month: "long" })}${more > 0 ? ` · ${more} more item${more > 1 ? "s" : ""} due within 45 days` : ""}</p></div>
     <div class="acts"><button class="sm ask" id="attnAsk">Ask how</button><button class="sm ghost" onclick="go('tax')">Open tax desk</button></div></div>`;
   $("#attnAsk").onclick = () => askClaude("Explain in simple words what I need to do for: " + top.title + " — and how, step by step.");
@@ -407,9 +435,9 @@ function towerHtml(g) {
       <div class="kv"><span class="k">Stages paid</span><span class="v num">${paid} of ${g.stages.length}</span>
         ${g.next_stage ? `<span class="k">Next stage (incl. tax)</span><span class="v num">≈ ${compact(g.next_stage, c)}</span>` : ""}
         <span class="k">Still to pay (incl. tax)</span><span class="v num">${money(g.remaining_with_tax, c)}</span>
-        ${(g.facts || []).map((f) => `<span class="k">${esc(f.label)}</span><span class="v num">${esc(f.value)}</span>`).join("")}
+        ${(g.facts || []).map((f) => `<span class="k">${esc(f.label)}</span><span class="v num">${esc(hideAmt(f.value))}</span>`).join("")}
         ${g.possession_date ? `<span class="k">Possession</span><span class="v num">${new Date(g.possession_date).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}</span>` : ""}</div>
-      ${g.warning ? `<div class="warnline">⚠ ${esc(g.warning)}</div>` : ""}</div></div>`;
+      ${g.warning ? `<div class="warnline">⚠ ${esc(hideAmt(g.warning))}</div>` : ""}</div></div>`;
 }
 function journeyChart(id, g) {
   if (!g.payments.length) return;
@@ -749,7 +777,7 @@ loaders.rules = async () => {
       <td data-l="Looks for" style="font-size:13px">${looks}</td><td data-l="Files to" style="font:500 12px var(--num);color:var(--muted)">${esc(r.route?.folder || "")}<br>${esc(r.route?.filename || "")}</td><td data-l="Source">${badge(r._source)}</td></tr>`;
   }).join("") + "</tbody>";
   $("#dlRules").innerHTML = `<thead><tr><th>Deadline</th><th>Due</th><th>Only if</th><th>Source</th></tr></thead><tbody>` + RULES.deadline_rules.map((r) =>
-    `<tr><td>${esc(r.title)}</td><td data-l="Due" style="font:500 12.5px var(--num)">${esc(r.due)}</td><td data-l="Only if" class="hint">${esc(r.if || "always")}</td><td data-l="Source">${badge(r._source)}</td></tr>`).join("") + "</tbody>";
+    `<tr><td>${esc(hideAmt(r.title))}</td><td data-l="Due" style="font:500 12.5px var(--num)">${esc(r.due)}</td><td data-l="Only if" class="hint">${esc(r.if || "always")}</td><td data-l="Source">${badge(r._source)}</td></tr>`).join("") + "</tbody>";
 };
 $("#saveRules").onclick = async () => {
   try { RULES = await api("/rules/user", { method: "POST", body: { file: $("#userRules").dataset.file || "my-rules.yaml", text: $("#userRules").value } });
@@ -896,7 +924,7 @@ loaders.settings = async () => {
 };
 // ---------------- ASK CLAUDE ----------------
 let CHAT_ID = null, STREAMING = false, META = null;
-const md = (t) => window.marked && window.DOMPurify ? DOMPurify.sanitize(marked.parse(t || "", { breaks: false, gfm: true })) : esc(t).replace(/\n/g, "<br>");
+const md = (t) => { t = hideAmt(t || ""); return window.marked && window.DOMPurify ? DOMPurify.sanitize(marked.parse(t, { breaks: false, gfm: true })) : esc(t).replace(/\n/g, "<br>"); };
 function greeting() { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; }
 loaders.chat = async () => {
   loadFx();
@@ -914,7 +942,7 @@ async function drawChatList() {
   $("#chatList").innerHTML = list.map((c) => {
     const d = (c.updated || "").slice(0, 10), label = d === today ? "Today" : d;
     const head = label !== last ? `<div class="day">${label}</div>` : ""; last = label;
-    return head + `<div class="ci ${c.id === CHAT_ID ? "on" : ""}" onclick="openChat(${c.id})"><span title="${esc(c.title)}">${esc(c.title)}</span>
+    return head + `<div class="ci ${c.id === CHAT_ID ? "on" : ""}" onclick="openChat(${c.id})"><span title="${esc(hideAmt(c.title))}">${esc(hideAmt(c.title))}</span>
       <button onclick="event.stopPropagation();delChat(${c.id})" title="Delete chat" aria-label="Delete chat">✕</button></div>`;
   }).join("") || `<p class="hint" style="padding:4px 8px">Your conversations will appear here.</p>`;
 }
