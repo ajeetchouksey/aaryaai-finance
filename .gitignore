@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+# never commit personal data
+*.db
+secrets.json
+config.yaml
+!examples/**/config.yaml
+data/
+aaryaai-finance-data/

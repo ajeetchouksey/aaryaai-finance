@@ -1,0 +1,36 @@
+# Example tracker: a flat bought under construction and paid in stages.
+# Copy to <your data folder>/trackers/ and edit. All figures here are made up.
+id: example-flat
+type: staged_purchase
+name: Riverside Towers B-1203
+subtitle: 2 BHK · under construction
+country: IN
+currency: INR
+price: 9500000                 # total price excluding GST
+tax_rate_on_payments: 0.05     # GST charged on each stage
+possession_date: 2028-06-30
+documents_folder: India/Property/Riverside
+stages_folder: India/Property/Riverside/Milestones
+stages:
+  - {no: "01", name: Booking, paid: 2025-01, keywords: [booking]}
+  - {no: "02", name: Agreement, paid: 2025-02, keywords: [agreement]}
+  - {no: "03", name: Plinth, paid: 2025-06, keywords: [plinth]}
+  - {no: "04", name: 1st slab, keywords: [1stslab, firstslab]}
+  - {no: "05", name: 5th slab, keywords: [5thslab]}
+  - {no: "06", name: Top slab, keywords: [topslab, terrace]}
+  - {no: "07", name: Possession, keywords: [possession]}
+payments:
+  - {date: 2025-01-15, cumulative: 950000, label: Booking}
+  - {date: 2025-02-20, cumulative: 1900000, label: Agreement}
+  - {date: 2025-06-10, cumulative: 2850000, label: Plinth}
+facts:
+  - {label: RERA no., value: P00000000000}
+  - {label: TDS, value: 1% on every stage (Form 26QB)}
+warning: Construction is running behind the builder's schedule — check the RERA quarterly update.
+document_rules:
+  - id: riverside_demand
+    label: Riverside demand letter
+    category: Property
+    confidence: 0.95
+    match: {text_all: [riversidetowers], text_any: [demandletter, paymentdue]}
+    route: {folder: "{stage_folder}", filename: "{first_date}_Demand{ext}"}

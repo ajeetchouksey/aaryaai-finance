@@ -1,0 +1,32 @@
+# Example personal rules. Copy to <your data folder>/rules/my-rules.yaml (or paste into the Rules tab).
+# Rules here are checked before the country packs; the same id as a pack rule replaces it.
+document_rules:
+  - id: my_gym_invoice
+    label: Gym membership invoice
+    category: Receipts & bills
+    confidence: 0.9
+    match:
+      text_any: [fitnessfirst, mcfit]
+      filename_any: [gym]
+    extract:
+      - {name: invoice_no, pattern: "Rechnungsnummer\\s*:?\\s*(\\w+)"}
+    route:
+      folder: "{folder:DE}/Receipts/{first_year}"
+      filename: "{first_date}_gym_{invoice_no}{ext}"
+
+  # Replace a pack rule: file Indian bank statements by bank instead of in one folder
+  - id: in_bank_statement
+    label: Indian bank statement
+    category: Bank statements
+    confidence: 0.8
+    match:
+      text_any: [accountstatement, transactionhistory]
+    route:
+      folder: "{folder:IN}/Bank/{first_year}"
+
+deadlines:
+  - id: my_car_insurance
+    title: "Renew car insurance ({year})"
+    due: "{year}-11-30"
+    severity: normal
+    detail: Compare quotes before the 30 November switching deadline.

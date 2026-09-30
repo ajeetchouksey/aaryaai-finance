@@ -1,0 +1,175 @@
+# India country pack — rules as data. Slabs verified September 2026 for FY 2025-26 and tax year 2026-27
+# (Income-tax Act 2025 in force from 1 April 2026). Edit or override in <data folder>/packs/IN/pack.yaml.
+code: IN
+name: India
+flag: "🇮🇳"
+currency: INR
+locale: en-IN
+default_folder: India
+description: Indian income tax (new vs old regime, resident or NRI), ITR and TDS deadlines, Indian document types.
+
+account_types: [Savings account, NRE account, NRO account, FCNR deposit, Fixed deposit, PPF, EPF, NPS, Demat / broker, Home loan]
+categories:
+  income: [Rent received, FD interest, Dividends]
+  expense: [Support to family, Property payment, Home loan EMI, SIP / mutual funds, Insurance premium]
+
+questions:
+  - id: in_nri
+    label: "Are you a non-resident (NRI) for Indian tax this year? (usually yes if you spent under 182 days in India)"
+    type: bool
+  - id: in_property_tds
+    label: "Are you buying property in India worth ₹50 lakh or more (so you must deduct 1% TDS on each payment)?"
+    type: bool
+  - id: in_advance_tax
+    label: "Will your Indian tax after TDS be more than ₹10,000 this year (advance tax applies)?"
+    type: bool
+
+ai_notes: |
+  India: a non-resident (NRI) is taxed only on Indian-source income (NRO/FD interest, rent, Indian capital gains).
+  NRIs don't get the s.87A rebate. NRE interest is tax-free in India. Buying property ≥ ₹50 lakh: buyer deducts 1% TDS
+  on each instalment (excluding GST) and files Form 26QB (to Mar 2026) / Form 141 (from Apr 2026) within 30 days of
+  month-end. Under a tax treaty the country of residence usually taxes worldwide income and credits Indian tax.
+
+calculators:
+  - id: regimes
+    title: "India: new vs old regime"
+    engine: in_regimes
+    params:
+      new_slabs: [[400000, 0.0], [800000, 0.05], [1200000, 0.10], [1600000, 0.15], [2000000, 0.20], [2400000, 0.25], [null, 0.30]]
+      old_slabs: [[250000, 0.0], [500000, 0.05], [1000000, 0.20], [null, 0.30]]
+      std_deduction: {new: 75000, old: 50000}
+      rebate: {new: [1200000, 60000], old: [500000, 12500]}
+      cess: 0.04
+      caps: {c80: 150000, d80: 25000, home_loan_interest: 200000}
+      capital_gains: {stcg_equity: 0.20, ltcg_equity: 0.125, ltcg_exempt: 125000}
+    inputs:
+      - {id: resident, label: "Resident in India this year (not NRI)", type: bool, from_answer: "!in_nri"}
+      - {id: salary, label: Indian salary, type: number}
+      - {id: other_income, label: "Other Indian income (NRO/FD interest, rent)", type: number}
+      - {id: stcg_equity, label: Short-term equity gains, type: number}
+      - {id: ltcg_equity, label: Long-term equity gains, type: number}
+      - {id: ded_80c, label: "80C (PPF, ELSS, home-loan principal)", type: number}
+      - {id: ded_80d, label: 80D health insurance, type: number}
+      - {id: home_loan_interest, label: Home-loan interest, type: number}
+  - id: property_tds
+    title: "TDS on a property instalment"
+    engine: in_property_tds
+    params: {rate: 0.01, threshold: 5000000}
+    inputs:
+      - {id: consideration, label: "Total property price (excl. GST)", type: number}
+      - {id: instalment, label: "This instalment (excl. GST)", type: number}
+      - {id: paid_on, label: Paid on, type: date}
+
+deadlines:
+  - id: in_itr
+    title: "Indian income-tax return for FY {tax_year}-{tax_year_next2} — original due date"
+    due: "{tax_year+1}-07-31"
+    severity: high
+    detail: "Non-audit individuals (ITR-1/ITR-2). NRIs must file if Indian income exceeds the basic exemption, or to claim back excess TDS (banks often deduct 30%+ on NRO interest)."
+    source: "Income-tax Department due dates"
+  - id: in_itr_belated
+    title: "Last date for a belated / revised ITR for FY {tax_year}-{tax_year_next2}"
+    due: "{tax_year+1}-12-31"
+    severity: high
+    detail: "Late fee ₹1,000–₹5,000. After this, only an 'updated return' (ITR-U) within 48 months, with extra tax."
+    source: "Income-tax Department due dates"
+  - id: in_advance_tax_q3
+    title: "Advance tax — 75% instalment"
+    due: "{year}-12-15"
+    if: in_advance_tax
+    severity: normal
+    detail: "Due only if tax after TDS exceeds ₹10,000. Instalments: 15 Jun (15%), 15 Sep (45%), 15 Dec (75%), 15 Mar (100%)."
+    source: "Section 211 / Income-tax Act 2025"
+  - id: in_advance_tax_q4
+    title: "Advance tax — final instalment"
+    due: "{year}-03-15"
+    if: in_advance_tax
+    severity: normal
+    detail: "Balance of the year's advance tax."
+    source: "Section 211 / Income-tax Act 2025"
+  - id: in_property_tds_rule
+    title: "After every property payment: deposit 1% TDS within 30 days of month-end"
+    due: ongoing
+    if: in_property_tds
+    severity: normal
+    detail: "Compute on the instalment's consideration EXCLUDING GST. File Form 141 Schedule B (Form 26QB before April 2026), then download Form 16B and give it to the seller within 15 days. Late deposit: interest plus ₹200/day fee (capped at the TDS)."
+    source: "s.194-IA / s.393 Income-tax Act 2025"
+  - id: in_residency_check
+    title: "Confirm your Indian residential status for FY {tax_year}-{tax_year_next2}"
+    due: "{tax_year+1}-04-15"
+    if: in_nri
+    severity: normal
+    detail: "Count days in India (under 182 → usually NRI). Convert resident savings accounts to NRO once non-resident (FEMA)."
+    source: "Income-tax Act / FEMA"
+
+document_rules:
+  - id: in_tds_statement
+    label: TDS on property — Form 26QB / Form 141 statement
+    category: Tax — India
+    confidence: 0.95
+    match: {text_any: [form26qb, form141, section393, section194ia], filename_any: [26qb, challanstatement, _statement]}
+    extract:
+      - {name: ack_no, pattern: "Acknowledgement Number\\s*:?\\s*([A-Z]{2,3}\\d{7,8})"}
+    route: {folder: "{folder:IN}/Property/TDS", filename: "{ack_no}_Statement{ext}"}
+  - id: in_tds_challan
+    label: TDS challan receipt (income-tax department)
+    category: Tax — India
+    confidence: 0.9
+    match: {text_all: [challanreceipt], text_any: [tdsonsaleofproperty, minorhead], filename_any: [challanreceipt]}
+    extract:
+      - {name: ack_no, pattern: "Acknowledgement Number\\s*:?\\s*([A-Z]{2,3}\\d{7,8})"}
+    route: {folder: "{folder:IN}/Property/TDS", filename: "{ack_no}_ChallanReceipt{ext}"}
+  - id: in_tds_bank_advice
+    label: Bank payment advice for a tax payment
+    category: Tax — India
+    confidence: 0.85
+    match: {text_all: [paymentadvice], text_any: [directtax, majorhead0020], filename_any: [bankadvice]}
+    extract:
+      - {name: bank_ref, pattern: "Bank Reference No\\s*:?\\s*(\\d+)"}
+    route: {folder: "{folder:IN}/Property/TDS", filename: "{bank_ref}_BankAdvice{ext}"}
+  - id: in_bank_statement
+    label: Indian bank statement
+    category: Bank statements
+    confidence: 0.75
+    match: {text_any: [transactionhistory, accountstatement, icicibank, hdfcbank, statebankofindia, withdrawalamount], filename_any: [optransactionhistory, statement]}
+    route: {folder: "{folder:IN}/Bank"}
+  - id: in_epfo
+    label: EPF / provident fund document
+    category: Social security & pension
+    confidence: 0.8
+    match: {text_any: [employeesprovidentfund, epfo, universalaccountnumber, passbook], filename_any: [epfo, epf, uan]}
+    route: {folder: "{folder:IN}/EPFO"}
+  - id: in_cas
+    label: Mutual-fund CAS (CAMS / KFintech / NSDL / CDSL)
+    category: Investments
+    confidence: 0.9
+    match: {text_any: [consolidatedaccountstatement, camsonline, kfintech], filename_any: [cas, cams, kfin]}
+    route: {folder: "{folder:IN}/Investments", filename: "{first_month}_CAS{ext}"}
+  - id: in_income_tax
+    label: "Indian income-tax document (Form 16 / 26AS / AIS / ITR)"
+    category: Tax — India
+    confidence: 0.85
+    match: {text_any: [form16, form26as, annualinformationstatement, itrv, acknowledgementitr], filename_any: [form16, 26as, ais, itr]}
+    extract:
+      - {name: assessment_year, pattern: "(?:Assessment Year|Tax Year)\\s*:?\\s*(20\\d{2}-\\d{2})"}
+    route: {folder: "{folder:IN}/Tax/AY {assessment_year}"}
+  - id: in_property_agreement
+    label: Property agreement / allotment / cost sheet
+    category: Property
+    confidence: 0.8
+    match: {text_any: [allotmentletter, costestimate, agreementforsale, paymentplan, reraregistration], filename_any: [allotment, costsheet, agreement, paymentplan]}
+    route: {folder: "{folder:IN}/Property"}
+
+checklist:
+  - "NRE interest is tax-free in India but usually taxable where you live — declare it there."
+  - "NRO / FD interest: banks deduct ~31% TDS; a treaty rate (often 10–15%) applies if you give Form 10F + a tax-residence certificate, or claim the excess back in your ITR."
+  - "As an NRI, resident savings accounts must be converted to NRO (FEMA)."
+  - "Sending money out of an NRO account needs Form 15CA/15CB (up to US$1M per year)."
+  - "Keep every property receipt and TDS challan — you'll need them to calculate gains if you ever sell."
+
+glossary:
+  NRI: "Non-resident for Indian tax — usually fewer than 182 days in India in a financial year."
+  "NRE / NRO": "Indian accounts for NRIs. NRE holds foreign money (repatriable, interest tax-free in India). NRO holds Indian income (taxed in India)."
+  TDS: "Tax deducted at source — the payer withholds tax and deposits it with the government."
+  "26QB / Form 141": "The form a property buyer uses to deposit 1% TDS. 26QB until March 2026, Form 141 from April 2026."
+  DTAA: "A double tax treaty — decides which country taxes what and credits tax paid in the other."

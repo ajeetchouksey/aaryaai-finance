@@ -1,0 +1,181 @@
+# Germany country pack — rules as data. Numbers verified September 2026; each rule names its source.
+# Edit freely or override in <data folder>/packs/DE/pack.yaml.
+code: DE
+name: Germany
+flag: "🇩🇪"
+currency: EUR
+locale: de-DE
+default_folder: Germany
+description: German income tax (§32a EStG), Abgeltungsteuer, filing deadlines, and German document types.
+
+account_types: [Girokonto (current), Tagesgeld (savings), Festgeld (fixed deposit), Depot (broker), Kreditkarte, Bausparvertrag, Loan]
+categories:
+  income: [Salary, Bonus, Kindergeld, Tax refund, Interest, Dividends]
+  expense: [Rent / Warmmiete, Nebenkosten, Rundfunkbeitrag, Insurance, Kita / school, Deutschlandticket]
+
+questions:
+  - id: de_mandatory_filing
+    label: "Do you HAVE to file a German tax return each year? (e.g. married with tax classes III/V, side income over €410, wage-replacement benefits over €410)"
+    type: bool
+  - id: de_joint
+    label: "Married and filing jointly (Zusammenveranlagung)?"
+    type: bool
+  - id: de_church
+    label: "Do you pay church tax (Kirchensteuer)?"
+    type: bool
+
+ai_notes: |
+  Germany: residents are taxed on WORLDWIDE income. Employees' tax is withheld (Lohnsteuer); a return
+  can bring a refund. Foreign capital income goes in Anlage KAP, foreign income under a treaty in Anlage AUS.
+  Investment income: flat ~26.4% (Abgeltungsteuer + Soli), €1,000 allowance per person (Sparer-Pauschbetrag).
+
+calculators:
+  - id: refund
+    title: German refund estimator
+    engine: de_32a_refund
+    params:
+      workers_allowance: 1230
+      church_rate: 0.09   # 8% in Bavaria and Baden-Württemberg
+      # §32a EStG: (basic allowance, zone2 end, a2, zone3 end, a3, c3, c4, zone4 end, c5)
+      tariffs:
+        2023: [10908, 15999, 979.18, 62809, 192.59, 966.53, 9972.98, 277825, 18307.73]
+        2024: [11784, 17005, 954.80, 66760, 181.19, 991.21, 10636.31, 277825, 18971.06]
+        2025: [12096, 17443, 932.30, 68480, 176.64, 1015.13, 10911.92, 277825, 19246.67]
+        2026: [12348, 17799, 914.51, 69878, 173.10, 1034.87, 11135.63, 277825, 19470.38]
+      soli_freigrenze: {2023: 17543, 2024: 18130, 2025: 19950, 2026: 20350}
+    inputs:
+      - {id: year, label: Tax year, type: select, options: [2025, 2024, 2023, 2026], default: 2025}
+      - {id: gross, label: Gross salary (Lohnsteuerbescheinigung line 3), type: number}
+      - {id: lohnsteuer, label: Lohnsteuer withheld (line 4), type: number}
+      - {id: soli_paid, label: Soli withheld (line 5), type: number}
+      - {id: werbungskosten, label: Work expenses (Werbungskosten), type: number, default: 1230}
+      - {id: vorsorge, label: Deductible insurance (Vorsorge), type: number}
+      - {id: other, label: "Other deductions (donations, childcare…)", type: number}
+      - {id: joint, label: Joint filing (combined figures), type: bool, from_answer: de_joint}
+      - {id: church, label: Church tax, type: bool, from_answer: de_church}
+    help: "Work expenses: commute €0.30/km (€0.38 from km 21 in 2024–25; €0.38 from km 1 from 2026), home office €6/day up to €1,260, work share of laptop/phone, courses and certifications. The first €1,230 is automatic."
+  - id: capital
+    title: Tax on investment income
+    engine: de_capital
+    params: {allowance_single: 1000, rate: 0.25, soli: 0.055, church_rate: 0.09, equity_fund_exempt: 0.30}
+    inputs:
+      - {id: gains, label: "Interest, dividends and gains (€)", type: number, default: 3000}
+      - {id: equity_etf, label: Equity ETF / fund (30% partial exemption), type: bool, default: true}
+      - {id: joint, label: "Joint (€2,000 allowance)", type: bool, from_answer: de_joint}
+      - {id: church, label: Church tax, type: bool, from_answer: de_church}
+
+deadlines:
+  - id: de_return_mandatory
+    title: "German tax return {tax_year} — due (no advisor)"
+    due: "{tax_year+1}-07-31"
+    if: de_mandatory_filing
+    severity: high
+    detail: "Mandatory filers must submit via ELSTER by 31 July of the following year. Late filing can cost a surcharge of at least €25 per month (§152 AO)."
+    source: "§149 AO"
+  - id: de_return_advisor
+    title: "German tax return {tax_year} — due if a Steuerberater / Lohnsteuerhilfeverein files it"
+    due: "{tax_year+2}-03-01"
+    if: de_mandatory_filing
+    severity: normal
+    detail: "Extended deadline when an advisor prepares the return."
+    source: "§149 AO"
+  - id: de_return_voluntary_last
+    title: "Last day for a voluntary German return for {tax_year}"
+    due: "{tax_year+4}-12-31"
+    if: "!de_mandatory_filing"
+    severity: high
+    detail: "Employees who don't have to file can still claim a refund up to four years later (Antragsveranlagung). Average refund is around €1,000."
+    source: "§46 EStG, §169 AO"
+  - id: de_freistellung
+    title: "Check Freistellungsaufträge and Vorabpauschale cash"
+    due: "{year}-01-15"
+    severity: normal
+    detail: "Split your €1,000 (€2,000 joint) tax-free investment allowance across your banks. In January, accumulating ETFs deduct 'Vorabpauschale' tax — keep some cash in the broker account."
+    source: "§20(9) EStG, §18 InvStG"
+
+document_rules:
+  - id: de_payslip
+    label: German payslip
+    category: Salary & payslips
+    confidence: 0.95
+    match: {text_any: [bruttonetto, abrechnungderbrutto, entgeltabrechnung, verdienstabrechnung, gehaltsabrechnung], filename_any: [brutto-netto, gehaltsabrechnung, entgeltabrechnung]}
+    extract:
+      - {name: period, source: squashed, pattern: "f(?:ü|u)r(januar|februar|m(?:ä|a)e?rz|april|mai|juni|juli|august|september|oktober|november|dezember)(20\\d{2})", parse: de_month_year}
+    route: {folder: "{folder:DE}", filename: "Brutto-Netto-Abrechnung {period_year} {period_month} {period_month_name_de}{ext}"}
+  - id: de_lohnsteuerbescheinigung
+    label: Lohnsteuerbescheinigung (annual wage-tax certificate)
+    category: Tax — Germany
+    confidence: 0.95
+    match: {text_all: [lohnsteuerbescheinigung], filename_any: [lohnsteuerbescheinigung]}
+    extract:
+      - {name: tax_year, source: squashed, pattern: "lohnsteuerbescheinigungf(?:ü|u)r(20\\d{2})"}
+    route: {folder: "{folder:DE}", filename: "Lohnsteuerbescheinigung {tax_year}{ext}"}
+  - id: de_tax_return
+    label: German income tax return (Einkommensteuererklärung)
+    category: Tax — Germany
+    confidence: 0.97
+    match: {text_any: [einkommensteuererklärung, einkommensteuererklarung, hauptvordruckest], filename_any: [steuererklaerung, steuererklärung, est1a]}
+    extract:
+      - {name: tax_year, pattern: "\\b(20[12]\\d)\\s+Hauptvordruck"}
+    route: {folder: "{folder:DE}", filename: "Einkommensteuererklaerung_{tax_year}{ext}"}
+  - id: de_tax_assessment
+    label: German tax assessment (Steuerbescheid)
+    category: Tax — Germany
+    confidence: 0.9
+    match: {text_any: [einkommensteuerbescheid, festsetzungderein, bescheidfür], filename_any: [steuerbescheid, bescheid]}
+    extract:
+      - {name: tax_year, pattern: "(?:für|fuer)\\s+(20[12]\\d)"}
+    route: {folder: "{folder:DE}", filename: "Steuerbescheid_{tax_year}{ext}"}
+  - id: de_tax_class
+    label: Tax-class change (Steuerklassenwechsel)
+    category: Tax — Germany
+    confidence: 0.9
+    match: {text_any: [steuerklassenwechsel, antragaufsteuerklassen], filename_any: [steuerklassenwechsel]}
+    route: {folder: "{folder:DE}"}
+  - id: de_social_security
+    label: Social-security / pension notice
+    category: Social security & pension
+    confidence: 0.97
+    match: {text_any: [meldebescheinigungzursozial, renteninformation, deutscherentenversicherung], filename_any: [meldebescheinigung, renteninformation]}
+    route: {folder: "{folder:DE}"}
+  - id: de_compensation
+    label: Employer compensation statement
+    category: Employment
+    confidence: 0.85
+    match: {text_any: [compensationstatement, annualbasepay, gehaltsmitteilung], filename_any: [annual-review, compensation]}
+    route: {folder: "{folder:DE}"}
+  - id: de_bank_statement
+    label: German bank statement (Kontoauszug)
+    category: Bank statements
+    confidence: 0.8
+    match: {text_any: [kontoauszug, umsatzübersicht, ibande], filename_any: [kontoauszug, umsaetze]}
+    route: {folder: "{folder:DE}/Bank", filename: "{first_month}_{stem}{ext}"}
+  - id: de_broker
+    label: German broker / depot document
+    category: Investments
+    confidence: 0.8
+    match: {text_any: [wertpapierabrechnung, depotauszug, traderepublic, scalablecapital, comdirect, jahressteuerbescheinigung], filename_any: [depot, wertpapier, trade republic, scalable]}
+    route: {folder: "{folder:DE}/Investments"}
+  - id: de_insurance
+    label: Insurance document (Versicherung)
+    category: Insurance
+    confidence: 0.75
+    match: {text_any: [versicherungsschein, beitragsrechnung, versicherungsnummer, haftpflicht, krankenversicherung], filename_any: [versicherung, police]}
+    route: {folder: "{folder:DE}/Insurance"}
+  - id: de_receipt
+    label: Receipt or bill (Rechnung) — may be tax-deductible
+    category: Receipts & bills
+    confidence: 0.6
+    match: {text_all: [rechnung], text_any: [mwst, ust, "€", eur], filename_any: [rechnung, quittung]}
+    route: {folder: "{folder:DE}/Receipts/{first_year}", filename: "{first_date}_{stem}{ext}"}
+
+checklist:
+  - "Declare foreign interest and dividends in Anlage KAP, even if taxed abroad."
+  - "Keep receipts for work expenses (laptop, courses, commute) — they lower your taxable income."
+  - "Give each bank a Freistellungsauftrag so the tax-free allowance is used automatically."
+
+glossary:
+  zvE: "German taxable income after all deductions."
+  Werbungskosten: "Work-related expenses; €1,230 is allowed automatically."
+  Abgeltungsteuer: "Flat ~26.4% tax (incl. Soli) on interest, dividends and gains."
+  Freistellungsauftrag: "Instruction to a bank to pay out investment income tax-free up to your allowance."

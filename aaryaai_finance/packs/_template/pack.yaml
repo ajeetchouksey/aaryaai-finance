@@ -1,0 +1,59 @@
+# Template for a new country pack. Copy this folder to <data folder>/packs/XX/ (for yourself)
+# or aaryaai_finance/packs/XX/ (to contribute), rename, and fill in. Every section is optional.
+# See CONTRIBUTING.md for the rule syntax.
+code: XX                 # ISO 3166 country code
+name: Countryland
+flag: "🏳️"
+currency: XXX            # ISO 4217 currency code
+locale: en-GB
+default_folder: Countryland
+description: One line about what this pack covers.
+
+account_types: [Current account, Savings account]
+categories:
+  income: []
+  expense: []
+
+# Yes/no questions asked during setup; deadline rules can depend on the answers ("if: id" or "if: '!id'").
+questions:
+  - id: xx_example_question
+    label: "Do you have to file a tax return every year?"
+    type: bool
+
+# Extra context the AI assistant gets when this country is switched on (optional).
+ai_notes: |
+  Short plain-English facts about how residents are taxed here.
+
+# Calculators: 'engine' names a built-in calculator; 'params' are the numbers; 'inputs' build the form.
+# Engines available: slabs (progressive brackets), de_32a_refund, de_capital, in_regimes, in_property_tds.
+calculators:
+  - id: income_tax
+    title: Income tax estimate
+    engine: slabs
+    params:
+      slabs: [[10000, 0.0], [40000, 0.20], [null, 0.40]]   # [upper limit, rate]; null = no limit
+      allowance: 0
+    inputs:
+      - {id: income, label: Taxable income, type: number}
+
+# Deadlines: due is a date template. {year} = calendar year, {tax_year} = the tax year it relates to,
+# with +/- offsets, e.g. "{tax_year+1}-07-31". Use "ongoing" for rules without a date.
+deadlines:
+  - id: xx_return
+    title: "Tax return for {tax_year}"
+    due: "{tax_year+1}-04-30"
+    severity: high           # critical | high | normal
+    detail: What to do and how.
+    source: Where this rule comes from
+
+# Document rules: how to recognise a document and where to file it. See CONTRIBUTING.md.
+document_rules:
+  - id: xx_payslip
+    label: Payslip
+    category: Salary & payslips
+    confidence: 0.9
+    match: {text_any: [payslip, "net pay"], filename_any: [payslip]}
+    route: {folder: "{folder:XX}/Payslips", filename: "Payslip_{first_month}{ext}"}
+
+checklist: []
+glossary: {}

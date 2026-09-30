@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1a2d">
+<link rel="icon" type="image/svg+xml" href="/static/brand/favicon.svg">
+<title>aaryaai finance</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/vendor/chart.umd.js"></script>
+<script src="/static/vendor/marked.min.js"></script>
+<script src="/static/vendor/purify.min.js"></script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"/><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8z"/></symbol>
+  <symbol id="i-pos" viewBox="0 0 24 24"><path d="M12 3v18M5 7h14M5 7l-3 7a3 3 0 006 0zM19 7l-3 7a3 3 0 006 0zM8 21h8"/></symbol>
+  <symbol id="i-goal" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="i-plan" viewBox="0 0 24 24"><path d="M3 6h18M3 12h12M3 18h7"/><path d="M17 15l3 3-3 3"/></symbol>
+  <symbol id="i-inv" viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M4 16l5-5 4 3 7-8"/><path d="M15 6h5v5"/></symbol>
+  <symbol id="i-learn" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 002 3h10a2 2 0 002-3l-5-9V3"/><path d="M7 15h10"/></symbol>
+  <symbol id="i-tax" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M8 15h3"/></symbol>
+  <symbol id="i-money" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/><path d="M16 3l3 3-3 3"/><path d="M19 6H9"/></symbol>
+  <symbol id="i-docs" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M12 11v5M9.5 13.5L12 16l2.5-2.5"/></symbol>
+  <symbol id="i-rules" viewBox="0 0 24 24"><path d="M4 6h10M4 12h16M4 18h7"/><circle cx="17" cy="6" r="2"/><circle cx="14" cy="18" r="2"/></symbol>
+  <symbol id="i-set" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></symbol>
+</svg>
+
+<header class="topbar">
+  <div class="brand"><span class="mark" aria-hidden="true"></span><span>aaryaai finance</span></div>
+  <div class="fxpill"><span class="fxlbl"></span> <b class="fxval">—</b></div>
+</header>
+
+<aside class="side">
+  <div class="brand"><span class="mark" aria-hidden="true"></span><span>aaryaai finance<small id="brandSub">local · private</small></span></div>
+  <nav id="tabs">
+    <button data-tab="chat" class="on"><svg><use href="#i-chat"/></svg><span id="navAsk">Ask AI</span></button>
+    <div class="sep"></div>
+    <button data-tab="position"><svg><use href="#i-pos"/></svg><span>Position</span></button>
+    <button data-tab="money"><svg><use href="#i-money"/></svg><span>Money</span></button>
+    <button data-tab="documents"><svg><use href="#i-docs"/></svg><span>Documents</span></button>
+    <button data-tab="goals"><svg><use href="#i-goal"/></svg><span>Goals</span></button>
+    <button data-tab="plan"><svg><use href="#i-plan"/></svg><span>Plan</span></button>
+    <button data-tab="invest"><svg><use href="#i-inv"/></svg><span>Invest</span></button>
+    <button data-tab="learn"><svg><use href="#i-learn"/></svg><span>Learn</span></button>
+    <button data-tab="tax"><svg><use href="#i-tax"/></svg><span>Tax</span></button>
+    <div class="sep"></div>
+    <button data-tab="rules"><svg><use href="#i-rules"/></svg><span>Rules</span></button>
+    <button data-tab="settings"><svg><use href="#i-set"/></svg><span>Settings</span></button>
+  </nav>
+  <div class="side-foot">
+    <div class="fxpill"><span><i class="live"></i><span class="fxlbl">rates</span></span> <b class="fxval">—</b></div>
+    <div class="by"><span>Part of</span><img src="/static/brand/logo-mono-white.svg" alt="aaryaai"></div>
+  </div>
+</aside>
+
+<main>
+<!-- ============ CHAT ============ -->
+<section id="chat" class="tab on">
+  <div class="chatwrap">
+    <aside class="chatside" id="chatSide">
+      <button class="newchat" onclick="newChat()">＋ New chat</button>
+      <div class="chatlist" id="chatList"></div>
+    </aside>
+    <div class="chatmain">
+      <button class="sidetoggle sm ghost" onclick="document.getElementById('chatSide').classList.toggle('open')">☰ Chats</button>
+      <div class="msgs" id="msgs"></div>
+      <form class="composer" id="composer">
+        <textarea id="prompt" rows="1" placeholder="Ask about your money, taxes or goals…" aria-label="Message"></textarea>
+        <div class="composer-bar">
+          <select id="modelPick" title="Model" aria-label="Model"></select>
+          <span class="muted small" id="chatStatus"></span>
+          <button id="sendBtn" class="send" title="Send (Enter)" aria-label="Send">↑</button>
+        </div>
+      </form>
+      <p class="disclaimer" id="chatDisclaimer">The assistant reads your numbers from this app to answer. It can make mistakes — confirm filings with a tax adviser.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ POSITION ============ -->
+<section id="position" class="tab">
+  <div class="pagehead"><div><div class="eyebrow" id="posDate">Position</div><h1>Where you stand</h1>
+    <p>Everything you own minus everything you owe, in each of your currencies and converted to your base currency.</p></div>
+    <button class="sm ghost" onclick="editItem()">＋ Add account or debt</button></div>
+  <div id="attention"></div>
+  <div id="ledger" class="ledger"></div>
+  <div class="kpis" id="kpis" style="margin-top:16px"></div>
+  <div class="grid g-hero" id="topGrid">
+    <div id="trackerMain"></div>
+    <div class="card"><h3>Coming up <span class="sub">tax &amp; compliance</span><span class="right"><button class="sm ghost" onclick="go('tax')">All deadlines →</button></span></h3><div id="nextDeadlines" class="tl"></div></div>
+  </div>
+  <div id="trackerJourneys"></div>
+  <div class="grid g2">
+    <div class="card"><h3>What you own, by type</h3><div class="chartbox"><canvas id="chCat"></canvas></div></div>
+    <div class="card"><h3>Net worth outlook <span class="sub">next 12 months at your current savings</span></h3><div class="chartbox"><canvas id="chHist"></canvas></div>
+      <p class="hint" id="outlookNote" style="margin-bottom:0"></p></div>
+  </div>
+  <div class="card"><h3>Accounts, assets &amp; debts <span class="right"><button class="sm" onclick="editItem()">＋ Add</button></span></h3>
+    <p class="hint" style="margin-top:-6px">Bank balances, Tagesgeld, EPF/PPF, FDs, pensions, loans. Shares and funds go in <b>Invest</b>. Tick “liquid” for money you can reach within a week.</p>
+    <table id="itemsTbl" class="rt"></table></div>
+</section>
+
+<!-- ============ MONEY ============ -->
+<section id="money" class="tab">
+  <div class="pagehead"><div><div class="eyebrow">Money · accounts &amp; transactions</div><h1>Money in &amp; out</h1>
+    <p>Your accounts in every currency you use. Log income and spending once, or set it to repeat daily, weekly, monthly, quarterly or yearly.</p></div>
+    <div class="seg" id="ccySeg" role="group" aria-label="Show amounts in"></div></div>
+  <div id="acctGroups" class="acct-groups"></div>
+  <div class="grid money-main">
+    <div>
+      <div class="card period-card">
+        <div class="periodbar"><div class="seg" id="perSeg"><button data-p="day">Day</button><button data-p="week">Week</button><button data-p="month">Month</button><button data-p="year">Year</button></div>
+          <div class="pnav"><button class="sm ghost" id="perPrev" aria-label="Previous">‹</button><b id="perLabel"></b><button class="sm ghost" id="perNext" aria-label="Next">›</button></div>
+          <select id="acctFilter" aria-label="Account"><option value="">All accounts</option></select></div>
+        <div class="kpis" id="perKpis" style="margin-top:14px"></div></div>
+      <div class="grid g2">
+        <div class="card"><h3>In vs out <span class="sub" id="trendSub"></span></h3><div class="chartbox"><canvas id="chTrend"></canvas></div></div>
+        <div class="card"><h3>Where it went</h3><div class="chartbox"><canvas id="chCats"></canvas></div></div>
+      </div>
+      <div class="card"><h3>Transactions <span class="sub" id="txCount"></span></h3><div id="txList" class="txlist"></div></div>
+    </div>
+    <aside>
+      <div class="card quick"><h3>Add an entry</h3>
+        <form id="txForm" class="form">
+          <div class="seg kind" id="kindSeg"><button type="button" data-k="expense" class="on">Expense</button><button type="button" data-k="income">Income</button><button type="button" data-k="transfer">Transfer</button></div>
+          <label>Amount <div class="amt-in"><input name="amount" type="number" step="0.01" min="0" required placeholder="0.00"><span id="amtCcy">EUR</span></div></label>
+          <label><span id="acctLbl">From account</span> <select name="account_id" required></select></label>
+          <label class="to-only">To account <select name="to_account_id"></select></label>
+          <label class="to-only">Amount received <input name="to_amount" type="number" step="0.01" placeholder="auto from today's rate"></label>
+          <label class="cat-only">Category <select name="category"></select></label>
+          <div class="row2"><label>Date <input name="date" type="date" required></label>
+            <label>Repeats <select name="frequency"><option value="">Never</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option></select></label></div>
+          <label class="rep-only">Until (optional) <input name="end_date" type="date"></label>
+          <label>Note <input name="note" placeholder="e.g. REWE, school fees, SIP"></label>
+          <button id="txSubmit">Add expense</button></form>
+        <p class="err" id="txErr"></p></div>
+      <div class="card"><h3>Repeating <span class="sub">written in automatically</span></h3><div id="recList"></div></div>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ DOCUMENTS ============ -->
+<section id="documents" class="tab">
+  <div class="pagehead"><div><div class="eyebrow">Documents · stored on this laptop</div><h1>Drop it, we'll file it</h1>
+    <p>Add a payslip, invoice, tax form, bank statement or receipt. The app reads it, applies your rules to work out what it is, and suggests the right folder and name — you confirm before anything is saved.</p></div>
+    <span class="rootchip" id="rootChip"></span></div>
+  <label class="drop" id="drop"><input type="file" id="fileIn" multiple accept=".pdf,.xls,.xlsx,.csv,.docx,.png,.jpg,.jpeg,.txt">
+    <div class="drop-ico"></div><b>Drop files here or click to choose</b><span>PDF, Excel, CSV, Word or photos · several at once</span></label>
+  <div id="queue" class="queue"></div>
+  <div class="grid g-hero">
+    <div class="card"><h3>Library <span class="sub" id="libCount"></span><span class="right"><input id="libSearch" placeholder="Search files…" class="search"></span></h3>
+      <div class="chips-filter" id="libCats"></div><table id="libTbl" class="rt"></table></div>
+    <div class="card"><h3>Folder check <span class="sub">spots misfiled documents</span></h3>
+      <p class="hint" style="margin-top:-4px">Reads every document in your planner folder and flags any that look like they belong somewhere else.</p>
+      <button class="sm" id="reviewBtn">Check my folders</button><div id="reviewOut" style="margin-top:12px"></div></div>
+  </div>
+</section>
+
+<!-- ============ GOALS ============ -->
+<section id="goals" class="tab">
+  <div class="pagehead"><div><div class="eyebrow">Goals</div><h1>What you're saving for</h1>
+    <p>Each goal becomes one number: how much to put aside per month. Inflation and growth are included.</p></div>
+    <button class="sm" onclick="editGoal()">＋ New goal</button></div>
+  <div class="kpis" id="goalKpis"></div>
+  <div id="goalCards" class="goalgrid" style="margin-top:16px"></div>
+  <div class="grid g2">
+    <div class="card"><h3>Which growth rate should I use?</h3>
+      <ul class="ideas"><li><b>Within 3 years</b> — keep it safe: Tagesgeld 2–3%, Indian FD 6–7%.</li>
+        <li><b>5+ years</b> — a global equity ETF has averaged ~6–8% a year over long periods, but can drop 30–50% in a bad year.</li>
+        <li><b>Inflation</b> — ~2% for euro goals, ~5% for rupee goals.</li></ul></div>
+    <div class="card"><h3>Goal ideas for your situation</h3>
+      <ul class="ideas"><li><b>Emergency fund</b> — 6 months of spending in Tagesgeld.</li>
+        <li><b>Your child's education</b> — 12–15 years away → equity ETF Sparplan.</li>
+        <li><b>Retirement top-up</b> — the gap between your expected German pension and the income you want.</li>
+        <li><b>Flat interiors &amp; possession costs</b> — furniture, maintenance deposit, registration.</li></ul></div>
+  </div>
+</section>
+
+<!-- ============ PLAN ============ -->
+<section id="plan" class="tab">
+  <div class="pagehead"><div><div class="eyebrow">Plan</div><h1>Money in, money out</h1>
+    <p>The gap between take-home pay and spending is what funds every goal. Aim to save 20% or more, and keep 3–6 months of spending in cash.</p></div>
+    <button class="sm" onclick="editExpense()">＋ Add spending</button></div>
+  <div class="kpis" id="cfKpis"></div>
+  <div class="card"><h3>Where each month's pay goes</h3><div id="flow"></div><p class="hint" id="cfSrc" style="margin-bottom:0"></p></div>
+  <div class="card"><h3>The 50/30/20 check <span class="sub">a common rule of thumb: 50% needs, 30% wants, 20% savings</span></h3><div id="rule"></div></div>
+  <div class="grid g2">
+    <div class="card"><h3>Monthly spending <span class="sub">EUR</span></h3><table id="expTbl" class="rt"></table></div>
+    <div class="card"><h3>What the numbers say</h3><ul class="ideas" id="cfTips"></ul>
+      <h3 style="margin-top:18px">Your monthly order of play</h3>
+      <ol class="ideas"><li>Pay tax deadlines — penalties are the worst “investment”.</li><li>Emergency fund to 3–6 months.</li>
+        <li>Set money aside for known big payments (property stages, school fees, tax bills).</li><li>A monthly ETF savings plan for goals 5+ years away.</li>
+        <li>Only then: single stocks or trading, with money you can afford to lose.</li></ol></div>
+  </div>
+</section>
+
+<!-- ============ INVEST ============ -->
+<section id="invest" class="tab">
+  <div class="pagehead"><div><div class="eyebrow">Invest</div><h1>What you own in markets</h1>
+    <p>ETFs, funds, shares and retirement accounts. Add a Yahoo Finance ticker (e.g. <code>VWCE.DE</code>, <code>IWDA.AS</code>, <code>VOO</code>, <code>^NSEI</code>) and prices update themselves.</p></div>
+    <span style="display:flex;gap:8px"><button class="sm ghost" onclick="refreshPrices()">↻ Refresh prices</button><button class="sm" onclick="editHolding()">＋ Add holding</button></span></div>
+  <div class="kpis" id="invKpis"></div>
+  <div class="grid g-hero">
+    <div class="card"><h3>Holdings</h3><table id="holdTbl" class="rt"></table><p class="hint" id="refreshMsg"></p></div>
+    <div class="card"><h3>Allocation</h3><div class="chartbox"><canvas id="chAlloc"></canvas></div></div>
+  </div>
+  <div class="card"><h3>Rules of thumb</h3>
+    <div class="grid g3">
+      <div><b>Spread the risk</b><p class="hint">One all-world ETF owns ~4,000 companies. A single stock can go to zero.</p></div>
+      <div><b>Fees compound too</b><p class="hint">A 1.5% yearly fee eats about a quarter of your gains over 20 years. Look for TER under 0.3%.</p></div>
+      <div><b>Tax on gains</b><p class="hint">Most countries tax profits when you sell; check your country's calculators on the Tax tab.</p></div>
+      <div><b>Funds from another country</b><p class="hint">Foreign funds can be taxed differently where you live — check before buying.</p></div>
+      <div><b>Currency drift</b><p class="hint">Returns in a weakening currency look bigger than they are in your spending currency.</p></div>
+      <div><b>Time, not timing</b><p class="hint">Monthly investing beats waiting for the “right moment” for most people.</p></div>
+    </div></div>
+</section>
+
+<!-- ============ LEARN ============ -->
+<section id="learn" class="tab">
+  <div class="pagehead"><div><div class="eyebrow">Learn</div><h1>Practise with pretend money</h1>
+    <p>Test trading rules on past prices, simulate a monthly Sparplan, and buy and sell with €10,000 of fake cash. Nothing here touches a real broker.</p></div></div>
+  <div class="explain"><b>Why most trading rules lose to simply holding:</b> every trade costs fees and, in Germany, ~26% tax on profit; rules often sit in cash on the best recovery days; and a backtest always looks better than the future will.</div>
+  <div class="grid g2">
+    <div class="card"><h3>Backtest a rule</h3>
+      <form id="btForm" class="form">
+        <div class="row2"><label>Ticker <input name="ticker" value="DEMO" placeholder="VWCE.DE, ^NSEI or DEMO"></label>
+        <label>Years <input name="years" type="number" value="10" min="2" max="30"></label></div>
+        <label>Rule <select name="strategy">
+          <option value="sma_cross">Trend following (50/200-day averages)</option>
+          <option value="momentum">12-month momentum</option>
+          <option value="rsi">Buy the dip (RSI)</option>
+          <option value="buy_hold">Buy &amp; hold</option></select></label>
+        <div class="row2"><label>Starting money <input name="capital" type="number" value="10000"></label>
+        <label>Cost per trade % <input name="cost_pct" type="number" step="0.01" value="0.1"></label></div>
+        <label>Or upload a prices CSV <input name="file" type="file" accept=".csv"></label>
+        <button>Run backtest</button></form>
+      <p class="hint">DEMO uses made-up prices and works offline.</p></div>
+    <div class="card"><h3>Result</h3><div id="btOut" class="empty">Run a backtest to compare the rule with simply holding.</div><div class="chartbox short" style="margin-top:12px"><canvas id="chBt"></canvas></div></div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><h3>Monthly Sparplan (SIP)</h3>
+      <form id="sipForm" class="form"><div class="row2"><label>Ticker <input name="ticker" value="DEMO"></label>
+        <label>Years <input name="years" type="number" value="10"></label></div>
+        <label>Monthly amount <input name="monthly" type="number" value="500"></label><button>Simulate</button></form>
+      <div id="sipOut"></div></div>
+    <div class="card"><h3>How a Sparplan grows</h3><div class="chartbox"><canvas id="chSip"></canvas></div></div>
+  </div>
+  <div class="card"><h3>Paper account <span class="sub">fake money</span></h3>
+    <div class="kpis" id="paperKpis"></div>
+    <form id="paperForm" class="form inline" style="margin-top:14px">
+      <label>Side <select name="side"><option>buy</option><option>sell</option></select></label>
+      <label>Ticker <input name="ticker" required placeholder="VWCE.DE"></label>
+      <label>Qty <input name="qty" type="number" step="any" required></label>
+      <label>Price <a href="#" onclick="getQuote(event)" style="font-size:12px">get live price</a><input name="price" type="number" step="any" required></label>
+      <label>Fee <input name="fee" type="number" step="any" value="1"></label>
+      <button>Place pretend order</button></form>
+    <p class="err" id="paperErr"></p>
+    <table id="paperPos" class="rt"></table>
+    <details style="margin-top:10px"><summary>Trade history</summary><table id="paperHist" class="rt"></table></details></div>
+</section>
+
+<!-- ============ TAX ============ -->
+<section id="tax" class="tab">
+  <div class="pagehead"><div><div class="eyebrow" id="taxEyebrow">Tax</div><h1>Your tax desk</h1>
+    <p>Deadlines and calculators come from your country packs and your own rules. Estimates only — confirm filings with a tax adviser.</p></div>
+    <span style="display:flex;gap:10px;align-items:center"><label class="hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="showDone"> Show done</label>
+    <button class="sm" onclick="addDeadline()">＋ Add my own</button></span></div>
+  <div class="kpis" id="taxKpis"></div>
+  <div class="card"><h3>Deadlines</h3><div id="calendar" class="tl"></div></div>
+  <div class="calcgrid" id="calcs"></div>
+  <div class="grid g2" id="checklists"></div>
+</section>
+
+<!-- ============ RULES ============ -->
+<section id="rules" class="tab">
+  <div class="pagehead"><div><div class="eyebrow">Rules · deterministic, no AI</div><h1>How the app decides</h1>
+    <p>Every document is sorted and every deadline is created by readable rules — from your country packs and from your own rules file. Same input, same result, every time.</p></div></div>
+  <div class="grid g2">
+    <div class="card"><h3>Test a document <span class="sub">see which rules match and why</span></h3>
+      <label class="drop small" id="ruleDrop"><input type="file" id="ruleFile"><b>Drop a file to test</b><span>Nothing is saved</span></label>
+      <div id="ruleTestOut"></div></div>
+    <div class="card"><h3>Your rules <span class="sub" id="rulesDir"></span></h3>
+      <p class="hint" style="margin-top:-6px">Your rules are checked before the country packs; a rule with the same id replaces the pack's. See the examples below or CONTRIBUTING.md.</p>
+      <textarea id="userRules" class="code" rows="16" spellcheck="false"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center"><button class="sm" id="saveRules">Save &amp; apply</button><button class="sm ghost" id="exampleRules">Insert an example</button><span id="rulesMsg" class="hint"></span></div></div>
+  </div>
+  <div class="card"><h3>Document rules <span class="sub" id="docRuleCount"></span></h3><table id="docRules" class="rt"></table></div>
+  <div class="card"><h3>Deadline rules</h3><table id="dlRules" class="rt"></table></div>
+</section>
+
+<!-- ============ SETTINGS ============ -->
+<section id="settings" class="tab">
+  <div class="pagehead"><div><div class="eyebrow">Settings</div><h1>Settings</h1><p>Everything is stored in your data folder. You can also edit <code>config.yaml</code> there by hand.</p></div>
+    <button class="sm ghost" onclick="openWizard()">Run setup again</button></div>
+  <div class="grid g2">
+    <div class="card"><h3>You &amp; your countries</h3><form id="setGeneral" class="form"></form></div>
+    <div class="card"><h3>Currencies</h3><form id="setFx" class="form"></form><p class="hint" id="fxMsg"></p></div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><h3>Documents folder</h3><form id="setDocs" class="form"></form></div>
+    <div class="card"><h3>✦ AI assistant <span class="sub">optional</span></h3><form id="setAI" class="form"></form><p class="hint" id="aiMsg"></p></div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><h3>Data</h3><div id="setData"></div></div>
+    <div class="card"><h3>Glossary</h3><dl class="gloss" id="gloss"></dl></div>
+  </div>
+</section>
+</main>
+
+<div id="wizard" class="wizard" hidden>
+  <div class="wiz-card">
+    <div class="wiz-head"><span class="mark"></span><div><b>aaryaai finance</b><small>Set up in four steps · everything stays on this computer</small></div><div class="wiz-steps" id="wizSteps"></div></div>
+    <div id="wizBody"></div>
+    <div class="wiz-foot"><button class="ghost" id="wizBack">Back</button><span class="err" id="wizErr"></span><button id="wizNext">Next</button></div>
+  </div>
+</div>
+
+<dialog id="dlg"><form method="dialog" id="dlgForm" class="form"></form></dialog>
+<div id="toast" role="status"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
