@@ -1,0 +1,91 @@
+{
+  "$comment": "What common index funds hold, so Diversify can look inside them. Approximate weights (rounded, mid-2026); indexes drift every month. Override or add your own in <data folder>/lookthrough.json with the same shape. match = lowercase words or tickers that identify a fund tracking this index.",
+  "indexes": {
+    "msci_world": {
+      "label": "MSCI World",
+      "match": ["msci world", "iwda", "eunl", "swda", "urth", "xdwd", "sppw", "core msci world"],
+      "asset_class": "shares",
+      "countries": {"US": 72, "JP": 5.5, "GB": 3.5, "CA": 3, "FR": 2.7, "DE": 2.3, "CH": 2.3, "AU": 1.7, "NL": 1.2, "other": 5.8},
+      "sectors": {"Tech": 26, "Financials": 17, "Industrials": 11, "Health": 10, "Consumer": 16, "Communication": 8, "Energy": 3.5, "Materials": 3, "Utilities": 2.6, "Real estate": 2.9},
+      "top": {"Nvidia": 5.3, "Apple": 4.7, "Microsoft": 4.4, "Amazon": 2.9, "Meta": 1.9, "Broadcom": 1.6, "Alphabet": 2.8, "Tesla": 1.2}
+    },
+    "ftse_all_world": {
+      "label": "FTSE All-World",
+      "match": ["all-world", "all world", "vwce", "vwrl", "vwra", "ftse all"],
+      "asset_class": "shares",
+      "countries": {"US": 62, "JP": 5.5, "GB": 3.5, "CN": 2.8, "CA": 2.8, "FR": 2.3, "IN": 2, "CH": 2, "DE": 2, "TW": 2, "other": 13.1},
+      "sectors": {"Tech": 27, "Financials": 17, "Industrials": 11, "Health": 9, "Consumer": 15, "Communication": 8, "Energy": 4, "Materials": 3.5, "Utilities": 2.8, "Real estate": 2.7},
+      "top": {"Nvidia": 4.6, "Apple": 4.1, "Microsoft": 3.8, "Amazon": 2.5, "Meta": 1.6, "Broadcom": 1.4, "Alphabet": 2.4, "Tesla": 1.0, "TSMC": 1.1}
+    },
+    "sp500": {
+      "label": "S&P 500",
+      "match": ["s&p 500", "s&p500", "sp500", "cspx", "sxr8", "voo", "spy", "ivv", "vuaa", "vusa"],
+      "asset_class": "shares",
+      "countries": {"US": 100},
+      "sectors": {"Tech": 32, "Financials": 13, "Health": 9.5, "Consumer": 16, "Communication": 10, "Industrials": 8.5, "Energy": 3, "Utilities": 2.4, "Real estate": 2.2, "Materials": 2},
+      "top": {"Nvidia": 7.3, "Apple": 6.5, "Microsoft": 6.1, "Amazon": 4, "Meta": 2.7, "Broadcom": 2.3, "Alphabet": 3.9, "Tesla": 1.7}
+    },
+    "nasdaq100": {
+      "label": "Nasdaq 100",
+      "match": ["nasdaq", "eqqq", "qqq", "cndx", "sxrv", "exxt"],
+      "asset_class": "shares",
+      "countries": {"US": 97, "other": 3},
+      "sectors": {"Tech": 51, "Communication": 16, "Consumer": 19, "Health": 6, "Industrials": 5, "Utilities": 1.5, "other": 1.5},
+      "top": {"Nvidia": 9.5, "Microsoft": 8.5, "Apple": 7.8, "Amazon": 5.6, "Broadcom": 5, "Meta": 3.7, "Alphabet": 5.3, "Tesla": 3.2}
+    },
+    "nifty50": {
+      "label": "Nifty 50",
+      "match": ["nifty 50", "nifty50", "nifty", "^nsei", "niftybees", "sensex"],
+      "asset_class": "shares",
+      "countries": {"IN": 100},
+      "sectors": {"Financials": 37, "Tech": 11, "Energy": 10, "Consumer": 16, "Industrials": 7, "Materials": 6, "Health": 4, "Communication": 4.5, "Utilities": 3, "other": 1.5},
+      "top": {"HDFC Bank": 13, "ICICI Bank": 9, "Reliance Industries": 8.5, "Infosys": 5, "Bharti Airtel": 4.7, "ITC": 3.5, "Larsen & Toubro": 3.8, "TCS": 3}
+    },
+    "msci_em": {
+      "label": "MSCI Emerging Markets",
+      "match": ["emerging", "eimi", "iema", "vfem", "msci em"],
+      "asset_class": "shares",
+      "countries": {"CN": 27, "IN": 19, "TW": 19, "KR": 10, "BR": 4.5, "SA": 3.5, "ZA": 3, "MX": 2, "other": 12},
+      "sectors": {"Tech": 24, "Financials": 23, "Consumer": 17, "Communication": 9, "Industrials": 7, "Materials": 6, "Energy": 4.5, "Health": 3.5, "Utilities": 2.5, "Real estate": 1.5, "other": 2},
+      "top": {"TSMC": 10, "Tencent": 4.5, "Samsung": 2.8, "Alibaba": 2.6, "HDFC Bank": 1.4, "Reliance Industries": 1.1}
+    },
+    "stoxx600": {
+      "label": "STOXX Europe 600",
+      "match": ["stoxx europe 600", "stoxx 600", "meud", "exsa", "europe 600", "msci europe", "imeu"],
+      "asset_class": "shares",
+      "countries": {"GB": 22, "FR": 16, "DE": 14, "CH": 14, "NL": 7, "SE": 5.5, "DK": 4, "IT": 5, "ES": 5, "other": 7.5},
+      "sectors": {"Financials": 22, "Industrials": 18, "Health": 14, "Consumer": 17, "Tech": 7, "Materials": 5.5, "Energy": 5, "Utilities": 4.5, "Communication": 4, "Real estate": 1.5, "other": 1.5},
+      "top": {"ASML": 2.4, "SAP": 2.3, "Nestlé": 1.9, "Novartis": 1.7, "Roche": 1.7, "AstraZeneca": 1.7, "Shell": 1.5, "HSBC": 1.5}
+    },
+    "dax": {
+      "label": "DAX",
+      "match": ["dax", "exs1", "dbxd"],
+      "asset_class": "shares",
+      "countries": {"DE": 100},
+      "sectors": {"Industrials": 27, "Tech": 16, "Financials": 20, "Consumer": 12, "Health": 6, "Materials": 6, "Communication": 6, "Utilities": 4, "Real estate": 1, "other": 2},
+      "top": {"SAP": 15, "Siemens": 10, "Allianz": 8, "Deutsche Telekom": 6.5, "Airbus": 5.5, "Rheinmetall": 4}
+    },
+    "global_bonds": {
+      "label": "Global bonds (hedged)",
+      "match": ["aggregate", "global bond", "agg", "aggh", "vagf", "eunu", "govt bond", "bond"],
+      "asset_class": "bonds",
+      "countries": {"US": 40, "JP": 10, "FR": 6, "DE": 6, "GB": 5, "IT": 4.5, "CN": 8, "other": 20.5},
+      "sectors": {"Government": 60, "Corporate": 20, "Securitised": 12, "other": 8},
+      "top": {}
+    },
+    "gold": {
+      "label": "Gold",
+      "match": ["gold", "xgld", "4gld", "sgbs", "goldbees", "sovereign gold"],
+      "asset_class": "gold",
+      "countries": {"other": 100},
+      "sectors": {"Gold": 100},
+      "top": {}
+    }
+  },
+  "country_currency": {"US": "USD", "IN": "INR", "JP": "JPY", "GB": "GBP", "CH": "CHF", "CA": "CAD", "AU": "AUD", "CN": "CNY", "TW": "TWD", "KR": "KRW",
+                        "BR": "BRL", "SA": "SAR", "ZA": "ZAR", "MX": "MXN", "SE": "SEK", "DK": "DKK",
+                        "DE": "EUR", "FR": "EUR", "NL": "EUR", "IT": "EUR", "ES": "EUR", "IE": "EUR", "AT": "EUR", "BE": "EUR", "FI": "EUR", "PT": "EUR"},
+  "country_names": {"US": "USA", "IN": "India", "JP": "Japan", "GB": "UK", "CH": "Switzerland", "CA": "Canada", "AU": "Australia", "CN": "China", "TW": "Taiwan",
+                    "KR": "South Korea", "BR": "Brazil", "SA": "Saudi Arabia", "ZA": "South Africa", "MX": "Mexico", "SE": "Sweden", "DK": "Denmark", "DE": "Germany",
+                    "FR": "France", "NL": "Netherlands", "IT": "Italy", "ES": "Spain", "IE": "Ireland", "AT": "Austria", "other": "Other"}
+}

@@ -2,7 +2,7 @@
 // Nothing you do here is saved or sent anywhere. Loaded before app.js.
 (() => {
   const NOT_SAVED = "This is the demo with sample data — changes aren't saved. Install the app to use your own data.";
-  const COMPUTE = new Set(["/tax/run", "/calc/backtest", "/calc/sip", "/rules/test", "/docs/analyze"]);
+  const COMPUTE = new Set(["/tax/run", "/calc/backtest", "/calc/sip", "/rules/test", "/docs/analyze", "/plan/odds/try"]);
   let REC = null;
   const loaded = (window.__DEMO_REC ? Promise.resolve(window.__DEMO_REC) : fetch("recordings.json").then((r) => r.json())).then((j) => (REC = j));
   const realFetch = window.fetch.bind(window);

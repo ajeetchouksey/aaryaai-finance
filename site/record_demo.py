@@ -75,12 +75,34 @@ async def _crawl(base: str, shots: Path) -> dict:
         pg = await b.new_page(viewport={"width": 1440, "height": 900}, device_scale_factor=1)
         pg.on("response", lambda r: asyncio.ensure_future(on_response(r)))
         pg.on("pageerror", lambda e: errors.append(str(e)))
-        await pg.goto(base + "/#position")
-        await pg.wait_for_timeout(1800)
+        await pg.goto(base + "/#home")
+        await pg.wait_for_timeout(2500)
 
         async def tab(t, wait=1400):
             await pg.evaluate(f"go('{t}')")
             await pg.wait_for_timeout(wait)
+
+        await pg.screenshot(path=str(shots / "home.png"))
+        # planning screens
+        await tab("forecast", 1800)
+        await pg.screenshot(path=str(shots / "forecast.png"))
+        pills = pg.locator("#fcScenarios button")
+        for i in range(await pills.count()):
+            await pills.nth(i).click(); await pg.wait_for_timeout(700)
+        await pills.first.click(); await pg.wait_for_timeout(700)
+        await tab("goals", 4000)
+        await pg.screenshot(path=str(shots / "odds.png"))
+        await tab("diversify", 1800)
+        await pg.screenshot(path=str(shots / "diversify.png"))
+        await tab("opportunities", 1600)
+        await tab("taxreturn", 1800)
+        await pg.screenshot(path=str(shots / "taxreturn.png"))
+        other = pg.locator("#twPick button:not(.on)")
+        for i in range(await other.count()):
+            await other.nth(i).click(); await pg.wait_for_timeout(1200)
+        await pg.locator("#twPick button").first.click(); await pg.wait_for_timeout(1200)
+        await tab("routines", 1600)
+        await pg.screenshot(path=str(shots / "routines.png"))
 
         await tab("position", 1800)
         await pg.screenshot(path=str(shots / "position.png"))
@@ -128,7 +150,7 @@ async def _crawl(base: str, shots: Path) -> dict:
         # phone size
         m = await b.new_page(viewport={"width": 390, "height": 844}, device_scale_factor=2)
         m.on("response", lambda r: asyncio.ensure_future(on_response(r)))
-        await m.goto(base + "/#position"); await m.wait_for_timeout(2200)
+        await m.goto(base + "/#home"); await m.wait_for_timeout(3000)
         await m.screenshot(path=str(shots / "mobile.png"))
         await b.close()
     if errors:

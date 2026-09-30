@@ -63,13 +63,25 @@ TOOLS = [
          "liquid": {"type": "boolean"}}}},
     {"name": "update_deadline", "description": "Mark a deadline done or open (only when asked). Use the key from list_deadlines.",
      "input_schema": {"type": "object", "required": ["key", "status"], "properties": {"key": {"type": "string"}, "status": {"type": "string", "enum": ["open", "done"]}}}},
+    {"name": "cash_forecast", "description": "12-month cash forecast per currency with lowest points, the user's minimum balances and the funding plan (transfers between currencies). Scenarios: base, salary_late, stage_early, no_estimated, fx_weak.",
+     "input_schema": {"type": "object", "properties": {"scenario": {"type": "string"}}}},
+    {"name": "goal_odds", "description": "Probability of reaching each goal (2,000 simulated markets), saving needed for 85%, monthly surplus split and what-if scenarios.",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"name": "diversification", "description": "Holdings looked through to asset class, country, currency, sector and companies; concentration flags vs the user's rules; target mix and tax-cheapest rebalancing.",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"name": "opportunities", "description": "Tax-aware opportunities from the country packs (allowances, holding periods, deadlines).",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"name": "tax_status", "description": "Tax-year workspace for a country (DE, IN…): documents found/missing, answers, estimate, findings, filing-sheet lines.",
+     "input_schema": {"type": "object", "required": ["country"], "properties": {"country": {"type": "string"}, "year": {"type": "integer"}}}},
     {"name": "run_backtest", "description": "Backtest a trading rule on past prices (paper only). ticker like VWCE.DE, ^NSEI or DEMO.",
      "input_schema": {"type": "object", "required": ["ticker"], "properties": {"ticker": {"type": "string"}, "strategy": {"type": "string", "enum": list(trading.STRATEGIES)}, "years": {"type": "integer"}}}},
 ]
 
 LABELS = {"get_financial_snapshot": "Looked at your finances", "list_deadlines": "Checked your deadlines", "list_calculators": "Looked up calculators",
           "run_calculator": "Ran a calculator", "plan_goal": "Ran a savings plan", "save_goal": "Saved a goal", "add_transaction": "Logged an entry",
-          "add_account": "Updated an account", "update_deadline": "Updated a deadline", "run_backtest": "Ran a backtest", "web_search": "Searched the web"}
+          "add_account": "Updated an account", "update_deadline": "Updated a deadline", "run_backtest": "Ran a backtest", "web_search": "Searched the web",
+          "cash_forecast": "Checked the cash forecast", "goal_odds": "Checked your goal odds", "diversification": "Checked your diversification",
+          "opportunities": "Looked for tax opportunities", "tax_status": "Opened your tax workspace"}
 CHANGES = {"save_goal", "add_transaction", "add_account", "update_deadline"}
 
 
@@ -97,6 +109,25 @@ class Toolbox:
 
     def t_get_financial_snapshot(self):
         return self.ctx.snapshot()
+
+    def t_cash_forecast(self, scenario: str = "base"):
+        f = self.ctx.forecast(scenario)
+        return {k: f[k] for k in ("today", "base", "scenario", "floors", "lowest", "plan", "watch", "options", "next90")} | {
+            "month_end": {c: [{"month": r["month"], "end": r["end"], "low": r["low"]} for r in rows] for c, rows in f["series"].items()}}
+
+    def t_goal_odds(self):
+        return self.ctx.goal_odds()
+
+    def t_diversification(self):
+        d = self.ctx.diversify()
+        return {k: d[k] for k in ("base", "total", "classes", "countries", "currencies", "sectors", "companies", "flags", "checks", "targets", "options")}
+
+    def t_opportunities(self):
+        return self.ctx.opportunities()
+
+    def t_tax_status(self, country: str, year: int | None = None):
+        ws = self.ctx.tax_workspace(country.upper(), year)
+        return {k: ws[k] for k in ("title", "year_label", "steps", "documents", "questions", "derived", "checks", "sheet", "estimate")}
 
     def t_list_deadlines(self, include_done: bool = False):
         return {"today": date.today().isoformat(), "items": [d for d in self.ctx.calendar() if include_done or d["status"] != "done"]}

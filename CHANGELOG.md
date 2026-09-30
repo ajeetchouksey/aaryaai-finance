@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.5.0 — 2026-09-30
+
+A new look and a set of planning tools. Everything works without AI; AI only adds optional extras.
+
+### New look
+- A **Home** screen: a warning when a payment would push a currency below its floor, key figures, what's coming up, goal odds and the routine inbox.
+- Flatter, calmer panels and a sidebar grouped into Plan, Records, Tax and More.
+
+### Planning
+- **Cash forecast**: 12 months per currency.
+  - It uses your balances, repeating entries, planned items, the stages of a staged purchase, and your usual spending (learned from the last six months). Each line says how sure it is: known, planned, estimated or learned.
+  - A **floor** per currency and a **funding plan** that proposes the transfer to make before a big payment.
+  - Scenarios: late salary, early stage, no estimated income, weaker currency.
+- **Goal odds**: each goal replayed in 2,000 simulated markets.
+  - Shows the chance of reaching it, the range of outcomes, and the monthly saving for 85%.
+  - A slider to try other amounts, where the monthly surplus goes, a glide path, and what-ifs.
+- **Diversify**: looks inside index funds to show countries, currencies, sectors and the biggest companies.
+  - Checks concentration against your own rules and compares with your target mix.
+  - Shows the tax-cheapest way to rebalance.
+- **Opportunities**: tax-aware checks from the country packs.
+  - India: the yearly tax-free long-term gains allowance, and the days until a holding turns long-term.
+  - Germany: moving the Freistellungsauftrag, cash for the Vorabpauschale, and the loss certificate deadline.
+
+### Tax return workspace
+- Per country and year:
+  - which documents are found or missing
+  - numbers read from documents
+  - the questions an adviser would ask
+  - what makes a difference, with an estimate
+  - a filing sheet for ELSTER or ITR-2, exportable as CSV or JSON for your adviser
+- Germany and India included. Defined in each pack's `tax_workspace:` section.
+- With AI connected: one tailored follow-up question.
+
+### Routines, proposals and audit log
+- Routines run while the app is open:
+  - forecast refresh
+  - deadline sweep
+  - monthly review
+  - tax-year prep
+  - exchange rates
+- They only suggest. Proposals wait for your approval.
+- Every approval, routine run, MCP call and data change is in the audit log.
+
+### MCP server
+- `aaryaai-finance mcp` lets Claude Desktop, VS Code (Copilot) and other MCP apps read your numbers over a local stdio connection, with no network port. They can also suggest transactions and planned items for you to approve. See [MCP](docs/mcp.md).
+- The in-app assistant can use the same forecast, odds, diversification, opportunities and tax tools.
+
+### Data model
+- Model version 3 adds:
+  - planned items
+  - proposals, audit log, routine runs and tax-year answers
+  - holdings: asset class, what they track, bought date, income type and yearly cost
+  - goals: how the money is invested
+- German accounts gain: investment income this year, and losses this year.
+- The first start backs up your database and migrates it in place, as before.
+
+
 ## 0.4.0 — 2026-09-30
 
 ### Website and live demo

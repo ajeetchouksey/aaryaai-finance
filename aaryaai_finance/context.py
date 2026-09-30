@@ -1,10 +1,11 @@
 """Everything the app knows at runtime, built from one data folder. Rebuilt when settings change."""
 from __future__ import annotations
 
-from datetime import date
+import json
+from datetime import date, datetime
 
 from .config import Settings
-from .core import fx, ledger, planning, trackers as trk
+from .core import forecast as fc, fx, ledger, odds as od, planning, portfolio as pf, trackers as trk
 from .core.db import DB
 from . import model as M
 from .packs import load_packs
@@ -176,3 +177,194 @@ class Ctx:
                 "this_month": {k: v for k, v in ledger.summary(self.db, "month", date.today(), self.base, self.rates).items()
                                if k in ("income", "expense", "net", "by_category")},
                 "trackers": [trk.summarize(t) for t in self.trackers], "today": date.today().isoformat()}
+
+    # ================================================================ planning services (shared by screens, routines, MCP)
+    def accounts_with_balance(self) -> list[dict]:
+        ledger.materialize_recurring(self.db)
+        return [a for a in ledger.balances(self.db) if not a["archived"]]
+
+    def floors(self) -> dict:
+        out = {}
+        for k, v in self.db.settings().items():
+            if k.startswith("floor:") and str(v).strip() not in ("", "None"):
+                try:
+                    out[k[6:]] = float(v)
+                except ValueError:
+                    pass
+        return out
+
+    def forecast(self, scenario: str = "base", months: int = 12) -> dict:
+        return fc.forecast(self.accounts_with_balance(), self.db.list("recurring"), self.db.list("planned", "date"), self.trackers,
+                           self.db.list("transactions"), self.rates, self.base, self.floors(), months, scenario=scenario)
+
+    def monthly_spend(self) -> float:
+        """Typical monthly spending in the base currency: your budget if set, otherwise recent months in Money."""
+        budget = self.db.list("expenses")
+        if budget:
+            return float(sum(e["amount"] for e in budget))
+        return float(ledger.monthly_actuals(self.db, self.base, self.rates).get("expense") or 0)
+
+    def monthly_income(self) -> float:
+        s = self.db.settings()
+        return float(s.get("monthly_income") or ledger.monthly_actuals(self.db, self.base, self.rates).get("income") or 0)
+
+    def goal_odds(self, whatif: bool = True) -> dict:
+        goals = self.db.list("goals", "priority, target_date")
+        key = json.dumps([goals, whatif, date.today().isoformat(), self.base, self.rates.get("_date"), len(self.db.list("expenses")), len(self.db.list("transactions")), self.db.settings().get("monthly_income")], default=str, sort_keys=True)
+        cache = getattr(self, "_odds_cache", None)
+        if cache and cache[0] == key:
+            return cache[1]
+        res = self._goal_odds(goals, whatif)
+        self._odds_cache = (key, res)
+        return res
+
+    def _goal_odds(self, goals: list, whatif: bool) -> dict:
+        out = []
+        for g in goals:
+            o = od.odds(g)
+            need85 = od.monthly_for(g, 0.85) if o["probability"] < 0.85 else None
+            try:
+                monthly_base = self.conv(g["monthly"] or 0, g["currency"])
+            except ValueError:
+                monthly_base = None
+            out.append({"id": g["id"], "name": g["name"], "currency": g["currency"], "target_today": g["target_today"],
+                        "target_date": g["target_date"], "saved": g["saved"], "monthly": g["monthly"], "monthly_base": monthly_base,
+                        "priority": g["priority"], "risk_set": g.get("risk"), **o, "monthly_for_85": need85,
+                        "odds_at_85": od.odds(g, monthly=need85)["probability"] if need85 else None,
+                        "glide": od.glide_path(g["target_date"]) if o["risk"] == "glide" else None})
+        income, spend = self.monthly_income(), self.monthly_spend()
+        surplus = income - spend
+        alloc = [{"label": g["name"], "amount": round(g["monthly_base"] or 0, 2), "goal_id": g["id"]} for g in out if g["monthly_base"]]
+        rest = surplus - sum(a["amount"] for a in alloc)
+        return {"goals": out, "base": self.base, "income": round(income, 2), "spend": round(spend, 2), "surplus": round(surplus, 2),
+                "allocation": alloc, "unallocated": round(rest, 2),
+                "whatif": od.whatif(goals) if (whatif and goals) else [], "runs": od.RUNS}
+
+    def diversify(self) -> dict:
+        from .tax.opportunities import tax_on_sale
+        s = self.db.settings()
+        lib = pf.load_library(self.settings.data_dir / "lookthrough.json")
+        rules = json.loads(s.get("diversify_rules") or "{}")
+        targets = json.loads(s.get("alloc_targets") or "{}")
+        try:
+            used_de = float(s.get("de_allowance_used") or 0)
+        except ValueError:
+            used_de = 0.0
+
+        def sale_tax(h, amount_base):
+            try:
+                amt = self.conv(amount_base, self.base, h.get("currency") or self.base)
+            except ValueError:
+                return 0.0, "no exchange rate"
+            t, note = tax_on_sale(self.packs, h, amt, used_allowance=used_de)
+            try:
+                return self.conv(t, h.get("currency") or self.base), note
+            except ValueError:
+                return 0.0, note
+        out = pf.analyse(self.accounts_with_balance(), self.db.list("holdings"), self.db.list("items"), self.base, self.rates, lib,
+                         rules, targets, self.monthly_spend(), float(s.get("monthly_investable") or 0), sale_tax)
+        out["monthly_investable"] = float(s.get("monthly_investable") or 0)
+        return out
+
+    def opportunities(self) -> dict:
+        from .tax import opportunities as op
+        data = op.Data(date.today(), self.base, self.rates, self.settings.config["profile"].get("answers", {}),
+                       self.accounts_with_balance(), self.db.list("holdings"), self.db.settings())
+        cards, errors = op.run_all(self.packs, data)
+        return {"cards": cards, "errors": errors, "base": self.base,
+                "total_base": round(sum(c["effect_base"] for c in cards if c["effect_base"] > 0), 2),
+                "inputs": {"in_ltcg_used": data.settings.get("in_ltcg_used", "")}}
+
+    def tax_workspace(self, country: str, year: int | None = None) -> dict:
+        from .tax import workspace as tw
+        p = self.packs.get(country)
+        if not p or not p.get("tax_workspace"):
+            raise ValueError(f"No tax workspace for {country}")
+        kind = p["tax_workspace"].get("year", "calendar")
+        year = int(year or tw.default_year(kind))
+        row = next((r for r in self.db.list("tax_years") if r["country"] == country and r["year"] == year), None)
+        saved = json.loads(row["answers"]) if row and row.get("answers") else {}
+        calcs = {c["id"]: c for c in p.get("calculators", [])}
+
+        def run_calc(cid, inputs):
+            return self.run_calculator(country, cid, inputs) if cid in calcs else {}
+        ws = tw.build(p, year, saved, self.known_documents(), self.settings.config["profile"].get("answers", {}), run_calc)
+        ws["years"] = [tw.default_year(kind) - i for i in range(0, 4)]
+        return ws
+
+    def known_documents(self) -> list[dict]:
+        """Filed documents from the database plus files already in your documents folder (recognised by name)."""
+        from .rules.engine import library
+        docs = self.db.list("documents")
+        seen = {d["stored_path"] for d in docs}
+        try:
+            lib = library(self.settings.documents_root)
+        except OSError:
+            lib = []
+        for r in lib:
+            if r["path"] in seen:
+                continue
+            rule, _, _ = self.rules.classify("", r["name"] + " " + r["folder"])
+            if rule:
+                docs.append({"stored_path": r["path"], "original_name": r["name"], "doc_type": rule["id"], "fields": {}, "doc_date": None})
+        return docs
+
+    def save_tax_answers(self, country: str, year: int, answers: dict) -> None:
+        row = next((r for r in self.db.list("tax_years") if r["country"] == country and r["year"] == int(year)), None)
+        cur = json.loads(row["answers"]) if row and row.get("answers") else {}
+        cur.update({k: v for k, v in answers.items() if isinstance(k, str) and len(k) < 60})
+        self.db.upsert("tax_years", {**({"id": row["id"]} if row else {}), "country": country, "year": int(year),
+                                     "answers": json.dumps(cur, ensure_ascii=False), "updated": datetime.now().isoformat(timespec="seconds")})
+
+    # ================================================================ proposals & audit
+    def audit(self, actor: str, action: str, detail: str = "") -> None:
+        try:
+            self.db.upsert("audit", {"ts": datetime.now().isoformat(timespec="seconds"), "actor": actor, "action": action, "detail": detail[:500]})
+        except Exception:  # noqa: BLE001 — logging must never break the action it records
+            pass
+
+    def propose(self, key: str, source: str, title: str, detail: str = "", effect: str = "", action: dict | None = None) -> int | None:
+        """Add a proposal once. A pending one with the same key is refreshed; decided ones are left alone."""
+        ex = next((p for p in self.db.list("proposals") if p["key"] == key), None)
+        row = {"key": key, "source": source, "title": title, "detail": detail, "effect": effect,
+               "action": json.dumps(action or {"type": "note"}, ensure_ascii=False)}
+        if ex:
+            if ex["status"] != "pending":
+                return None
+            return self.db.upsert("proposals", {"id": ex["id"], **row})
+        return self.db.upsert("proposals", {**row, "status": "pending", "created": datetime.now().isoformat(timespec="seconds")})
+
+    def decide(self, pid: int, decision: str, actor: str = "You") -> dict:
+        p = self.db.get("proposals", pid)
+        if not p or p["status"] != "pending":
+            raise ValueError("This proposal was already decided or no longer exists.")
+        result = ""
+        if decision == "approve":
+            a = json.loads(p.get("action") or "{}") if isinstance(p.get("action"), str) else (p.get("action") or {})
+            t = a.get("type")
+            if t == "set_goal_monthly":
+                g = self.db.get("goals", a["goal_id"])
+                if not g:
+                    raise ValueError("That goal no longer exists.")
+                self.db.upsert("goals", {"id": g["id"], "monthly": a["monthly"]})
+                result = f"{g['name']}: saving set to {a['monthly']:,.0f} {g['currency']} a month"
+            elif t == "add_planned":
+                rid = self.db.upsert("planned", a["row"])
+                result = f"planned item #{rid} added"
+            elif t == "add_deadline":
+                row = {"status": "open", "source": "proposal", "severity": "normal", **a["row"]}
+                row.setdefault("key", "proposal:" + p["key"])
+                if not any(c["key"] == row["key"] for c in self.db.list("calendar")):
+                    self.db.upsert("calendar", row)
+                result = "deadline added"
+            elif t == "add_transaction":
+                row = dict(a["row"])
+                row.setdefault("created", datetime.now().isoformat(timespec="seconds"))
+                rid = self.db.upsert("transactions", row)
+                result = f"transaction #{rid} added"
+            else:
+                result = "noted"
+        self.db.upsert("proposals", {"id": pid, "status": "approved" if decision == "approve" else "skipped",
+                                     "decided": datetime.now().isoformat(timespec="seconds")})
+        self.audit(actor, ("Approved: " if decision == "approve" else "Skipped: ") + p["title"], result)
+        return {"ok": True, "result": result}

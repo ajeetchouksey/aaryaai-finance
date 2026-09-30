@@ -338,7 +338,7 @@ $("#wizNext").onclick = async () => {
   try {
     await api("/setup/apply", { method: "POST", body: WIZ.data });
     $("#wizard").hidden = true; toast("You're all set"); await loadConfig();
-    go(location.hash.slice(1) || "position");
+    go(location.hash.slice(1) || "home");
   } catch (e) { $("#wizErr").textContent = e.message; }
   $("#wizNext").disabled = false;
 };
@@ -500,14 +500,14 @@ loaders.goals = async () => {
   GOALS = raw;
   const on = calc.goals.filter((g) => g.status === "on_track").length;
   const nearest = calc.goals.slice().sort((a, b) => a.months - b.months)[0];
-  $("#goalKpis").innerHTML = kpi("Goals", calc.goals.length, `${on} on track`, meter(calc.goals.length ? on / calc.goals.length : 0)) +
+  $("#goalKpis").innerHTML = kpi("Goals", calc.goals.length, `${on} on track at steady growth`, meter(calc.goals.length ? on / calc.goals.length : 0)) +
     kpi("Needed each month", money(calc.total_required_monthly), `all goals, in ${BASE()}`) +
     kpi("Nearest goal", nearest ? `<span class="txt">${esc(nearest.name.split(" (")[0])}</span>` : "—", nearest ? nearest.months + " months away" : "");
   $("#goalCards").innerHTML = calc.goals.map((g) => {
     const color = g.status === "on_track" ? css("--good") : g.status === "close" ? css("--gold") : ccyColor(g.currency);
     const f = (v) => money(v, g.currency);
     const by = new Date(); by.setMonth(by.getMonth() + g.months);
-    return `<div class="card"><h3>${esc(g.name)} <span class="right"><span class="pill ${g.status}">${g.verdict}</span><button class="sm ghost" onclick="editGoal(${g.id})">Edit</button></span></h3>
+    return `<div class="card"><h3>${esc(g.name)} <span class="right"><span class="pill ${g.status}" title="If growth were the same every year">${g.verdict} at steady growth</span><button class="sm ghost" onclick="editGoal(${g.id})">Edit</button></span></h3>
       <div class="goal">${ring(g.progress_pct, color)}
         <div><div class="eyebrow">Save each month</div><div class="need">${f(g.required_monthly)}<small> / month</small></div>
           <div class="hint">Target ${f(g.target_future)} by ${MON[by.getMonth()]} ${by.getFullYear()} · ${g.months} months</div></div>
@@ -530,6 +530,7 @@ window.editGoal = (id) => {
     ["currency", "Currency", "select", CFG.currencies], ["target_date", "Needed by", "date"],
     ["saved", "Already set aside", "number"], ["monthly", "Saving per month", "number"],
     ["annual_return", "Expected growth per year (0.05 = 5%)", "number"], ["inflation", "Inflation per year (0.02 = 2%)", "number"],
+    ["risk", "How the money is invested", "select", [["", "Guess from the growth rate"], ["cash", "Cash / savings account"], ["balanced", "Balanced mix"], ["growth", "Mostly shares"], ["glide", "Shares now, safer as the date nears"]]],
     ["priority", "Priority (1 = must, 3 = nice)", "select", [1, 2, 3]], ["note", "Note", "textarea"], ...customFields("goals")], row,
     async (r) => { await api("/api/goals", { method: "POST", body: r }); loaders.goals(); },
     async (i) => { await api("/api/goals/" + i, { method: "DELETE" }); loaders.goals(); });
@@ -614,7 +615,12 @@ window.editHolding = (id) => {
     ["asset_type", "Type", "select", ["ETF", "Mutual fund", "Stock", "Bond", "Gold", "Crypto", "Retirement"]],
     ["account", "Where (broker/bank)"], ["country", "Country", "select", ["", ...(CFG.countries || [])]],
     ["qty", "Units", "number"], ["avg_cost", "Average buy price per unit", "number"],
-    ["currency", "Currency", "select", CFG.currencies], ["last_price", "Current price (blank = automatic)", "number"]], row,
+    ["currency", "Currency", "select", CFG.currencies], ["last_price", "Current price (blank = automatic)", "number"],
+    ["bought", "First bought on (for holding periods)", "date"],
+    ["asset_class", "Asset class", "select", [["shares", "Shares"], ["bonds", "Bonds"], ["cash", "Cash / money market"], ["gold", "Gold"], ["property", "Property (REIT)"], ["pension", "Pension"], ["other", "Other"]]],
+    ["lookthrough", "Tracks (for Diversify)", "select", [["", "guess from the name"], ["ftse_all_world", "FTSE All-World"], ["msci_world", "MSCI World"], ["sp500", "S&P 500"], ["nasdaq100", "Nasdaq 100"], ["stoxx600", "STOXX Europe 600"], ["dax", "DAX"], ["msci_em", "MSCI Emerging Markets"], ["nifty50", "Nifty 50"], ["global_bonds", "Global bonds"], ["gold", "Gold"]]],
+    ["payout", "Income", "select", [["accumulating", "Accumulating (reinvests)"], ["distributing", "Distributing (pays out)"]]],
+    ["ter", "Yearly cost (TER, 0.0022 = 0.22%)", "number"], ...customFields("holdings")], row,
     async (r) => { await api("/api/holdings", { method: "POST", body: r }); loaders.invest(); },
     async (i) => { await api("/api/holdings/" + i, { method: "DELETE" }); loaders.invest(); });
 };
@@ -1300,7 +1306,7 @@ addEventListener("resize", () => {
   const st = await api("/setup/status").catch(() => ({ configured: false }));
   if (!st.configured) { openWizard(); return; }
   await loadConfig();
-  const start = location.hash.slice(1) || "position";
+  const start = location.hash.slice(1) || "home";
   ($(`#tabs button[data-tab="${start}"]`) || $("#tabs button")).click();
   setTimeout(checkUpdate, 1500);
 })();

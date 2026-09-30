@@ -12,6 +12,9 @@
 - **Your data model, your way.** Record types, fields and links are defined in JSON; countries and you can add fields or whole new record types (insurance policies, loans…) without code. Links are enforced, and everything exports to JSON.
 - **Hide amounts.** One click or Alt+H masks every figure for screen-sharing; percentages and dates stay visible.
 - **Locked down.** Only the app's own page can talk to it (host, origin and session-token checks), API keys live in your system keychain, and shared rules are validated before use.
+- **Plans ahead.** A 12-month cash forecast per currency with a funding plan, goal odds from 2,000 simulated markets, a look-through diversification check, tax-aware opportunities and a tax-return workspace. See [Planning tools](docs/planning.md).
+- **Routines, not surprises.** Scheduled checks suggest; nothing changes until you approve. Every action is in an audit log.
+- **Works with your assistant.** A local MCP server lets Claude Desktop or VS Code (Copilot) read your numbers and suggest changes. See [MCP](docs/mcp.md).
 - **AI if you want it.** Plug in **Claude** (Anthropic API), **Azure OpenAI / AI Foundry**, **GitHub Models** or **Ollama** (fully offline). The assistant reads your numbers through tools; it can't see files.
 
 > Estimates only. The tax calculators and deadlines are there to help you prepare — confirm filings with a tax adviser.
@@ -35,20 +38,27 @@ Your browser opens at <http://127.0.0.1:8770> and a four-step setup asks for:
 3. **Documents** — where filed documents go; point it at an existing folder to keep your structure
 4. **AI** — optional; pick a provider and paste its key
 
-Options: `aaryaai-finance --data-dir PATH --port 8770 --no-browser`. The app only listens on `127.0.0.1`.
+Options: `aaryaai-finance --data-dir PATH --port 8770 --no-browser --no-routines`. `aaryaai-finance mcp` runs the MCP server for AI assistants (see [MCP](docs/mcp.md)). The app only listens on `127.0.0.1`.
 
 ## What's inside
 
-| Tab | What it does |
+| Screen | What it does |
 |---|---|
-| **Position** | Net worth by currency and in your base currency, cash cushion, what's coming up, staged purchases (e.g. a flat paid in instalments) |
+| **Home** | Warnings, key figures, what's coming up, goal odds and proposals waiting for you |
+| **Cash forecast** | 12 months per currency, floors, the funding plan and scenarios |
+| **Goals** | Chance of reaching each goal, the saving for 85%, what-ifs, plus the straight-line plan |
+| **Diversify** | Asset class, country, currency, sector and companies inside your funds; your rules; target mix |
+| **Opportunities** | Tax allowances, holding periods and deadlines from your country packs |
+| **Budget** | Monthly spending, 50/30/20 check, cash cushion |
 | **Money** | Accounts per country, income/expense/transfer, repeating entries (daily → yearly), monthly charts |
-| **Documents** | Drop PDFs, images, Excel or Word files: text is extracted, the rules decide type and folder, you confirm the move |
-| **Goals / Plan** | Inflation-aware goal planning, budget, emergency fund |
+| **Net worth** | Net worth by currency and in your base currency, staged purchases (e.g. a flat paid in instalments) |
 | **Invest / Learn** | Holdings, SIP simulator, strategy backtests and paper trading on synthetic or real prices — no live trading |
-| **Tax** | Deadlines from your packs, calculators (e.g. German refund estimate, India old vs new regime), checklists |
+| **Documents** | Drop PDFs, images, Excel or Word files: text is extracted, the rules decide type and folder, you confirm the move |
+| **Tax return** | Documents found or missing, the questions an adviser would ask, what makes a difference, a filing sheet |
+| **Deadlines** | Deadlines from your packs, calculators (e.g. German refund estimate, India old vs new regime), checklists |
+| **Routines** | Scheduled checks, proposals to approve, connections (AI, MCP), audit log |
 | **Rules** | Test a document against the rules, write your own rules in YAML |
-| **Ask AI** | Chat that can read your snapshot, run calculators, add transactions and mark deadlines done |
+| **Ask AI** | Chat that can read your snapshot, forecast, odds and tax status, run calculators and log entries |
 
 ## Your data folder
 
@@ -62,6 +72,7 @@ aaryaai-finance-data/
   rules/*.yaml        your own document & deadline rules
   packs/XX/pack.yaml  your own or overridden country packs (optional)
   trackers/*.yaml     staged purchases, e.g. a flat under construction
+  lookthrough.json    what your index funds hold, if you want to add or correct some (optional)
   documents/          filed documents (or any folder you choose)
 ```
 

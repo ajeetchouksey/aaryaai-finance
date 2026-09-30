@@ -65,7 +65,7 @@ def test_migrates_v1_database_without_losing_data(tmp_path):
     extra = json.loads(sqlite3.connect(p).execute("SELECT extra FROM accounts WHERE id=1").fetchone()[0])
     assert extra["_legacy"]["legacy_col"] == "keep me"          # dropped columns are kept, not lost
     assert DB(p, backup_dir=tmp_path / "backups").sync_report == {"created": [], "rebuilt": [], "backup": None, "repaired": [], "changed": []}
-    assert sqlite3.connect(p).execute("PRAGMA user_version").fetchone()[0] == 2
+    assert sqlite3.connect(p).execute("PRAGMA user_version").fetchone()[0] == M.CORE["version"]
 
 
 def test_relations_are_enforced(tmp_path):

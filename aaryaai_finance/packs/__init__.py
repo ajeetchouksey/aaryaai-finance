@@ -47,6 +47,13 @@ def validate_pack(d) -> list[str]:
             e.append(f"deadline {r['id']}: 'if: {r['if']}' doesn't match any question id")
     for r in d.get("document_rules") or []:
         e += check_rule(r)
+    from ..tax.opportunities import ENGINES as OPP
+    for o in d.get("opportunities") or []:
+        if not isinstance(o, dict) or o.get("engine") not in OPP:
+            e.append(f"opportunity {o.get('id') if isinstance(o, dict) else o}: unknown engine (available: {', '.join(sorted(OPP))})")
+    if d.get("tax_workspace") is not None:
+        from ..tax.workspace import validate_workspace
+        e += validate_workspace(d["tax_workspace"])
     m = d.get("model")
     if m is not None and not isinstance(m, dict):
         e.append("model must be a mapping with 'extends' and/or 'entities'")
@@ -66,6 +73,12 @@ def _read(p: Path) -> dict:
     # drop parts that would break at run time; the rest of the pack still works
     from ..tax.engines import ENGINES
     d["calculators"] = [c for c in d.get("calculators") or [] if isinstance(c, dict) and c.get("engine") in ENGINES]
+    from ..tax.opportunities import ENGINES as OPP
+    d["opportunities"] = [o for o in d.get("opportunities") or [] if isinstance(o, dict) and o.get("engine") in OPP]
+    if d.get("tax_workspace") is not None:
+        from ..tax.workspace import validate_workspace
+        if validate_workspace(d["tax_workspace"]):
+            d.pop("tax_workspace")
     d["_source"] = "user" if "packs" in p.parts[-3:-1] and BUILTIN not in p.parents else "built-in"
     d["_path"] = str(p)
     return d

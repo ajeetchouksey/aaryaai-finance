@@ -1,153 +1,643 @@
 {
   "$comment": "The data model. The database is generated from this file; packs and users can add fields (see CONTRIBUTING.md). Field types: text, int, number, money, bool, date, datetime, enum, ref, json, currency, country.",
-  "version": 2,
+  "version": 3,
   "entities": {
     "accounts": {
       "label": "Account",
       "fields": {
-        "name": {"type": "text", "required": true, "label": "Name"},
-        "institution": {"type": "text", "label": "Bank / institution"},
-        "country": {"type": "country", "required": true, "default": "DE", "label": "Country"},
-        "currency": {"type": "currency", "required": true, "default": "EUR", "label": "Currency"},
-        "type": {"type": "text", "default": "Current account", "label": "Type"},
-        "opening_balance": {"type": "money", "default": 0, "label": "Opening balance"},
-        "opening_date": {"type": "date", "label": "Opening date"},
-        "liquid": {"type": "bool", "default": 1, "label": "Available within a week"},
-        "in_networth": {"type": "bool", "default": 1, "label": "Count in net worth"},
-        "archived": {"type": "bool", "default": 0, "label": "Archived"},
-        "note": {"type": "text", "label": "Note"}
+        "name": {
+          "type": "text",
+          "required": true,
+          "label": "Name"
+        },
+        "institution": {
+          "type": "text",
+          "label": "Bank / institution"
+        },
+        "country": {
+          "type": "country",
+          "required": true,
+          "default": "DE",
+          "label": "Country"
+        },
+        "currency": {
+          "type": "currency",
+          "required": true,
+          "default": "EUR",
+          "label": "Currency"
+        },
+        "type": {
+          "type": "text",
+          "default": "Current account",
+          "label": "Type"
+        },
+        "opening_balance": {
+          "type": "money",
+          "default": 0,
+          "label": "Opening balance"
+        },
+        "opening_date": {
+          "type": "date",
+          "label": "Opening date"
+        },
+        "liquid": {
+          "type": "bool",
+          "default": 1,
+          "label": "Available within a week"
+        },
+        "in_networth": {
+          "type": "bool",
+          "default": 1,
+          "label": "Count in net worth"
+        },
+        "archived": {
+          "type": "bool",
+          "default": 0,
+          "label": "Archived"
+        },
+        "note": {
+          "type": "text",
+          "label": "Note"
+        }
       }
     },
     "recurring": {
       "label": "Repeating entry",
       "fields": {
-        "kind": {"type": "enum", "values": ["income", "expense", "transfer"], "required": true},
-        "account_id": {"type": "ref", "to": "accounts", "required": true, "on_delete": "restrict"},
-        "amount": {"type": "money", "required": true},
-        "category": {"type": "text"},
-        "note": {"type": "text"},
-        "frequency": {"type": "enum", "values": ["daily", "weekly", "monthly", "quarterly", "yearly"], "required": true},
-        "start_date": {"type": "date", "required": true},
-        "end_date": {"type": "date"},
-        "to_account_id": {"type": "ref", "to": "accounts", "on_delete": "restrict"},
-        "to_amount": {"type": "money"},
-        "active": {"type": "bool", "default": 1}
+        "kind": {
+          "type": "enum",
+          "values": [
+            "income",
+            "expense",
+            "transfer"
+          ],
+          "required": true
+        },
+        "account_id": {
+          "type": "ref",
+          "to": "accounts",
+          "required": true,
+          "on_delete": "restrict"
+        },
+        "amount": {
+          "type": "money",
+          "required": true
+        },
+        "category": {
+          "type": "text"
+        },
+        "note": {
+          "type": "text"
+        },
+        "frequency": {
+          "type": "enum",
+          "values": [
+            "daily",
+            "weekly",
+            "monthly",
+            "quarterly",
+            "yearly"
+          ],
+          "required": true
+        },
+        "start_date": {
+          "type": "date",
+          "required": true
+        },
+        "end_date": {
+          "type": "date"
+        },
+        "to_account_id": {
+          "type": "ref",
+          "to": "accounts",
+          "on_delete": "restrict"
+        },
+        "to_amount": {
+          "type": "money"
+        },
+        "active": {
+          "type": "bool",
+          "default": 1
+        }
+      }
+    },
+    "planned": {
+      "label": "Planned item",
+      "fields": {
+        "date": {
+          "type": "date",
+          "required": true,
+          "label": "Date"
+        },
+        "kind": {
+          "type": "enum",
+          "values": [
+            "income",
+            "expense",
+            "transfer"
+          ],
+          "required": true,
+          "label": "Kind"
+        },
+        "account_id": {
+          "type": "ref",
+          "to": "accounts",
+          "required": true,
+          "on_delete": "cascade",
+          "label": "Account"
+        },
+        "amount": {
+          "type": "money",
+          "required": true,
+          "label": "Amount"
+        },
+        "to_account_id": {
+          "type": "ref",
+          "to": "accounts",
+          "on_delete": "cascade",
+          "label": "To account"
+        },
+        "to_amount": {
+          "type": "money",
+          "label": "Amount received"
+        },
+        "category": {
+          "type": "text",
+          "label": "Category"
+        },
+        "note": {
+          "type": "text",
+          "label": "Note"
+        },
+        "confidence": {
+          "type": "enum",
+          "values": [
+            "known",
+            "planned",
+            "estimated"
+          ],
+          "default": "planned",
+          "label": "How sure"
+        },
+        "done": {
+          "type": "bool",
+          "default": 0,
+          "label": "Done (now in Money)"
+        }
       }
     },
     "documents": {
       "label": "Filed document",
       "fields": {
-        "sha256": {"type": "text", "unique": true},
-        "original_name": {"type": "text"},
-        "stored_path": {"type": "text"},
-        "doc_type": {"type": "text"},
-        "category": {"type": "text"},
-        "country": {"type": "country"},
-        "doc_date": {"type": "date"},
-        "amount": {"type": "money"},
-        "currency": {"type": "currency"},
-        "fields": {"type": "json"},
-        "text_excerpt": {"type": "text"},
-        "confidence": {"type": "number"},
-        "status": {"type": "text", "default": "filed"},
-        "added": {"type": "datetime"}
+        "sha256": {
+          "type": "text",
+          "unique": true
+        },
+        "original_name": {
+          "type": "text"
+        },
+        "stored_path": {
+          "type": "text"
+        },
+        "doc_type": {
+          "type": "text"
+        },
+        "category": {
+          "type": "text"
+        },
+        "country": {
+          "type": "country"
+        },
+        "doc_date": {
+          "type": "date"
+        },
+        "amount": {
+          "type": "money"
+        },
+        "currency": {
+          "type": "currency"
+        },
+        "fields": {
+          "type": "json"
+        },
+        "text_excerpt": {
+          "type": "text"
+        },
+        "confidence": {
+          "type": "number"
+        },
+        "status": {
+          "type": "text",
+          "default": "filed"
+        },
+        "added": {
+          "type": "datetime"
+        }
       }
     },
     "transactions": {
       "label": "Transaction",
       "fields": {
-        "date": {"type": "date", "required": true, "label": "Date"},
-        "account_id": {"type": "ref", "to": "accounts", "required": true, "on_delete": "restrict", "label": "Account"},
-        "kind": {"type": "enum", "values": ["income", "expense", "transfer"], "required": true, "label": "Kind"},
-        "amount": {"type": "money", "required": true, "label": "Amount"},
-        "category": {"type": "text", "label": "Category"},
-        "note": {"type": "text", "label": "Note"},
-        "to_account_id": {"type": "ref", "to": "accounts", "on_delete": "restrict", "label": "To account"},
-        "to_amount": {"type": "money", "label": "Amount received"},
-        "recurring_id": {"type": "ref", "to": "recurring", "on_delete": "set_null"},
-        "doc_id": {"type": "ref", "to": "documents", "on_delete": "set_null"},
-        "created": {"type": "datetime"}
+        "date": {
+          "type": "date",
+          "required": true,
+          "label": "Date"
+        },
+        "account_id": {
+          "type": "ref",
+          "to": "accounts",
+          "required": true,
+          "on_delete": "restrict",
+          "label": "Account"
+        },
+        "kind": {
+          "type": "enum",
+          "values": [
+            "income",
+            "expense",
+            "transfer"
+          ],
+          "required": true,
+          "label": "Kind"
+        },
+        "amount": {
+          "type": "money",
+          "required": true,
+          "label": "Amount"
+        },
+        "category": {
+          "type": "text",
+          "label": "Category"
+        },
+        "note": {
+          "type": "text",
+          "label": "Note"
+        },
+        "to_account_id": {
+          "type": "ref",
+          "to": "accounts",
+          "on_delete": "restrict",
+          "label": "To account"
+        },
+        "to_amount": {
+          "type": "money",
+          "label": "Amount received"
+        },
+        "recurring_id": {
+          "type": "ref",
+          "to": "recurring",
+          "on_delete": "set_null"
+        },
+        "doc_id": {
+          "type": "ref",
+          "to": "documents",
+          "on_delete": "set_null"
+        },
+        "created": {
+          "type": "datetime"
+        }
       },
       "indexes": [
-        {"name": "tx_recur_once", "columns": ["recurring_id", "date"], "unique": true, "where": "recurring_id IS NOT NULL"},
-        {"name": "tx_account_date", "columns": ["account_id", "date"]}
+        {
+          "name": "tx_recur_once",
+          "columns": [
+            "recurring_id",
+            "date"
+          ],
+          "unique": true,
+          "where": "recurring_id IS NOT NULL"
+        },
+        {
+          "name": "tx_account_date",
+          "columns": [
+            "account_id",
+            "date"
+          ]
+        }
       ]
     },
     "items": {
       "label": "Asset or debt",
       "fields": {
-        "name": {"type": "text", "required": true, "label": "Name"},
-        "kind": {"type": "enum", "values": ["asset", "liability"], "required": true, "label": "Asset or debt"},
-        "category": {"type": "text", "required": true, "label": "Type"},
-        "amount": {"type": "money", "required": true, "default": 0, "label": "Amount"},
-        "currency": {"type": "currency", "required": true, "default": "EUR", "label": "Currency"},
-        "liquid": {"type": "bool", "default": 0, "label": "Available within a week"},
-        "country": {"type": "country", "default": "DE", "label": "Country"},
-        "note": {"type": "text", "label": "Note"},
-        "updated": {"type": "date"}
+        "name": {
+          "type": "text",
+          "required": true,
+          "label": "Name"
+        },
+        "kind": {
+          "type": "enum",
+          "values": [
+            "asset",
+            "liability"
+          ],
+          "required": true,
+          "label": "Asset or debt"
+        },
+        "category": {
+          "type": "text",
+          "required": true,
+          "label": "Type"
+        },
+        "amount": {
+          "type": "money",
+          "required": true,
+          "default": 0,
+          "label": "Amount"
+        },
+        "currency": {
+          "type": "currency",
+          "required": true,
+          "default": "EUR",
+          "label": "Currency"
+        },
+        "liquid": {
+          "type": "bool",
+          "default": 0,
+          "label": "Available within a week"
+        },
+        "country": {
+          "type": "country",
+          "default": "DE",
+          "label": "Country"
+        },
+        "note": {
+          "type": "text",
+          "label": "Note"
+        },
+        "updated": {
+          "type": "date"
+        },
+        "asset_class": {
+          "type": "enum",
+          "values": [
+            "shares",
+            "bonds",
+            "cash",
+            "property",
+            "gold",
+            "pension",
+            "other"
+          ],
+          "strict": false,
+          "label": "Asset class (for Diversify)",
+          "help": "Leave empty to guess from the type."
+        }
       }
     },
     "holdings": {
       "label": "Investment",
       "fields": {
-        "name": {"type": "text", "required": true, "label": "Name"},
-        "ticker": {"type": "text", "label": "Ticker"},
-        "asset_type": {"type": "text", "default": "ETF", "label": "Type"},
-        "country": {"type": "country", "default": "DE", "label": "Country"},
-        "account": {"type": "text", "label": "Broker / depot"},
-        "qty": {"type": "number", "default": 0, "label": "Quantity"},
-        "avg_cost": {"type": "money", "default": 0, "label": "Average cost"},
-        "currency": {"type": "currency", "default": "EUR", "label": "Currency"},
-        "last_price": {"type": "money"},
-        "price_date": {"type": "date"}
+        "name": {
+          "type": "text",
+          "required": true,
+          "label": "Name"
+        },
+        "ticker": {
+          "type": "text",
+          "label": "Ticker"
+        },
+        "asset_type": {
+          "type": "text",
+          "default": "ETF",
+          "label": "Type"
+        },
+        "country": {
+          "type": "country",
+          "default": "DE",
+          "label": "Country"
+        },
+        "account": {
+          "type": "text",
+          "label": "Broker / depot"
+        },
+        "qty": {
+          "type": "number",
+          "default": 0,
+          "label": "Quantity"
+        },
+        "avg_cost": {
+          "type": "money",
+          "default": 0,
+          "label": "Average cost"
+        },
+        "currency": {
+          "type": "currency",
+          "default": "EUR",
+          "label": "Currency"
+        },
+        "last_price": {
+          "type": "money"
+        },
+        "price_date": {
+          "type": "date"
+        },
+        "asset_class": {
+          "type": "enum",
+          "values": [
+            "shares",
+            "bonds",
+            "cash",
+            "property",
+            "gold",
+            "pension",
+            "other"
+          ],
+          "strict": false,
+          "default": "shares",
+          "label": "Asset class"
+        },
+        "lookthrough": {
+          "type": "text",
+          "label": "Tracks (for Diversify)",
+          "help": "e.g. msci_world, ftse_all_world, sp500, nasdaq100, nifty50. Leave empty to guess from the name or ticker."
+        },
+        "bought": {
+          "type": "date",
+          "label": "Bought on (first purchase)"
+        },
+        "payout": {
+          "type": "enum",
+          "values": [
+            "accumulating",
+            "distributing"
+          ],
+          "strict": false,
+          "default": "accumulating",
+          "label": "Income"
+        },
+        "ter": {
+          "type": "number",
+          "label": "Yearly cost (TER, e.g. 0.0022)"
+        }
       }
     },
     "goals": {
       "label": "Goal",
       "fields": {
-        "name": {"type": "text", "required": true, "label": "Goal"},
-        "target_today": {"type": "money", "required": true, "label": "Cost in today's money"},
-        "currency": {"type": "currency", "default": "EUR", "label": "Currency"},
-        "target_date": {"type": "date", "required": true, "label": "Target date"},
-        "saved": {"type": "money", "default": 0, "label": "Saved so far"},
-        "monthly": {"type": "money", "default": 0, "label": "Saving per month"},
-        "annual_return": {"type": "number", "default": 0.05, "label": "Expected yearly return"},
-        "inflation": {"type": "number", "default": 0.02, "label": "Inflation"},
-        "priority": {"type": "int", "default": 2, "label": "Priority"},
-        "note": {"type": "text", "label": "Note"}
+        "name": {
+          "type": "text",
+          "required": true,
+          "label": "Goal"
+        },
+        "target_today": {
+          "type": "money",
+          "required": true,
+          "label": "Cost in today's money"
+        },
+        "currency": {
+          "type": "currency",
+          "default": "EUR",
+          "label": "Currency"
+        },
+        "target_date": {
+          "type": "date",
+          "required": true,
+          "label": "Target date"
+        },
+        "saved": {
+          "type": "money",
+          "default": 0,
+          "label": "Saved so far"
+        },
+        "monthly": {
+          "type": "money",
+          "default": 0,
+          "label": "Saving per month"
+        },
+        "annual_return": {
+          "type": "number",
+          "default": 0.05,
+          "label": "Expected yearly return"
+        },
+        "inflation": {
+          "type": "number",
+          "default": 0.02,
+          "label": "Inflation"
+        },
+        "priority": {
+          "type": "int",
+          "default": 2,
+          "label": "Priority"
+        },
+        "note": {
+          "type": "text",
+          "label": "Note"
+        },
+        "risk": {
+          "type": "enum",
+          "values": [
+            "cash",
+            "balanced",
+            "growth",
+            "glide"
+          ],
+          "strict": false,
+          "label": "How it's invested",
+          "help": "cash = savings account; balanced = mix; growth = mostly shares; glide = shares now, safer as the date nears. Empty = guessed from the expected return."
+        }
       }
     },
     "expenses": {
       "label": "Budget line",
       "fields": {
-        "category": {"type": "text", "required": true},
-        "amount": {"type": "money", "required": true},
-        "note": {"type": "text"}
+        "category": {
+          "type": "text",
+          "required": true
+        },
+        "amount": {
+          "type": "money",
+          "required": true
+        },
+        "note": {
+          "type": "text"
+        }
       }
     },
     "paper_trades": {
       "label": "Paper trade",
       "fields": {
-        "ts": {"type": "datetime", "required": true},
-        "ticker": {"type": "text", "required": true},
-        "side": {"type": "enum", "values": ["buy", "sell"], "required": true},
-        "qty": {"type": "number", "required": true},
-        "price": {"type": "money", "required": true},
-        "fee": {"type": "money", "default": 1.0},
-        "note": {"type": "text"}
+        "ts": {
+          "type": "datetime",
+          "required": true
+        },
+        "ticker": {
+          "type": "text",
+          "required": true
+        },
+        "side": {
+          "type": "enum",
+          "values": [
+            "buy",
+            "sell"
+          ],
+          "required": true
+        },
+        "qty": {
+          "type": "number",
+          "required": true
+        },
+        "price": {
+          "type": "money",
+          "required": true
+        },
+        "fee": {
+          "type": "money",
+          "default": 1.0
+        },
+        "note": {
+          "type": "text"
+        }
       }
     },
     "calendar": {
       "label": "Deadline",
       "fields": {
-        "due": {"type": "date", "label": "Due"},
-        "country": {"type": "country", "label": "Country"},
-        "title": {"type": "text", "required": true, "label": "Title"},
-        "detail": {"type": "text", "label": "What to do"},
-        "severity": {"type": "enum", "values": ["critical", "high", "normal"], "strict": false, "default": "normal", "label": "Importance"},
-        "status": {"type": "enum", "values": ["open", "done", "skipped"], "strict": false, "default": "open"},
-        "source": {"type": "text", "label": "Source"},
-        "key": {"type": "text", "unique": true}
+        "due": {
+          "type": "date",
+          "label": "Due"
+        },
+        "country": {
+          "type": "country",
+          "label": "Country"
+        },
+        "title": {
+          "type": "text",
+          "required": true,
+          "label": "Title"
+        },
+        "detail": {
+          "type": "text",
+          "label": "What to do"
+        },
+        "severity": {
+          "type": "enum",
+          "values": [
+            "critical",
+            "high",
+            "normal"
+          ],
+          "strict": false,
+          "default": "normal",
+          "label": "Importance"
+        },
+        "status": {
+          "type": "enum",
+          "values": [
+            "open",
+            "done",
+            "skipped"
+          ],
+          "strict": false,
+          "default": "open"
+        },
+        "source": {
+          "type": "text",
+          "label": "Source"
+        },
+        "key": {
+          "type": "text",
+          "unique": true
+        }
       }
     },
     "snapshots": {
@@ -155,31 +645,178 @@
       "primary_key": "day",
       "system": true,
       "fields": {
-        "day": {"type": "date", "required": true},
-        "net_worth": {"type": "money", "renamed_from": ["net_worth_eur"]},
-        "assets": {"type": "money", "renamed_from": ["assets_eur"]},
-        "liabilities": {"type": "money", "renamed_from": ["liabilities_eur"]},
-        "currency": {"type": "currency"}
+        "day": {
+          "type": "date",
+          "required": true
+        },
+        "net_worth": {
+          "type": "money",
+          "renamed_from": [
+            "net_worth_eur"
+          ]
+        },
+        "assets": {
+          "type": "money",
+          "renamed_from": [
+            "assets_eur"
+          ]
+        },
+        "liabilities": {
+          "type": "money",
+          "renamed_from": [
+            "liabilities_eur"
+          ]
+        },
+        "currency": {
+          "type": "currency"
+        }
       }
     },
     "chats": {
       "label": "Chat",
       "system": true,
       "fields": {
-        "title": {"type": "text"},
-        "created": {"type": "datetime"},
-        "updated": {"type": "datetime"}
+        "title": {
+          "type": "text"
+        },
+        "created": {
+          "type": "datetime"
+        },
+        "updated": {
+          "type": "datetime"
+        }
       }
     },
     "chat_messages": {
       "label": "Chat message",
       "system": true,
       "fields": {
-        "chat_id": {"type": "ref", "to": "chats", "required": true, "on_delete": "cascade"},
-        "role": {"type": "text"},
-        "content": {"type": "json"},
-        "ts": {"type": "datetime"}
+        "chat_id": {
+          "type": "ref",
+          "to": "chats",
+          "required": true,
+          "on_delete": "cascade"
+        },
+        "role": {
+          "type": "text"
+        },
+        "content": {
+          "type": "json"
+        },
+        "ts": {
+          "type": "datetime"
+        }
       }
+    },
+    "proposals": {
+      "label": "Proposal",
+      "system": true,
+      "fields": {
+        "key": {
+          "type": "text",
+          "unique": true
+        },
+        "created": {
+          "type": "datetime"
+        },
+        "source": {
+          "type": "text"
+        },
+        "title": {
+          "type": "text",
+          "required": true
+        },
+        "detail": {
+          "type": "text"
+        },
+        "effect": {
+          "type": "text"
+        },
+        "action": {
+          "type": "json"
+        },
+        "status": {
+          "type": "enum",
+          "values": [
+            "pending",
+            "approved",
+            "skipped"
+          ],
+          "default": "pending"
+        },
+        "decided": {
+          "type": "datetime"
+        }
+      }
+    },
+    "audit": {
+      "label": "Audit entry",
+      "system": true,
+      "fields": {
+        "ts": {
+          "type": "datetime",
+          "required": true
+        },
+        "actor": {
+          "type": "text"
+        },
+        "action": {
+          "type": "text"
+        },
+        "detail": {
+          "type": "text"
+        }
+      }
+    },
+    "routine_runs": {
+      "label": "Routine run",
+      "system": true,
+      "fields": {
+        "routine": {
+          "type": "text",
+          "required": true
+        },
+        "ran": {
+          "type": "datetime",
+          "required": true
+        },
+        "status": {
+          "type": "text"
+        },
+        "summary": {
+          "type": "json"
+        }
+      }
+    },
+    "tax_years": {
+      "label": "Tax year",
+      "system": true,
+      "fields": {
+        "country": {
+          "type": "country",
+          "required": true
+        },
+        "year": {
+          "type": "int",
+          "required": true
+        },
+        "answers": {
+          "type": "json"
+        },
+        "updated": {
+          "type": "datetime"
+        }
+      },
+      "indexes": [
+        {
+          "name": "tax_year_once",
+          "columns": [
+            "country",
+            "year"
+          ],
+          "unique": true
+        }
+      ]
     }
   }
 }

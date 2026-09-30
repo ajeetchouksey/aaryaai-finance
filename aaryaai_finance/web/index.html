@@ -24,6 +24,12 @@
   <symbol id="i-docs" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M12 11v5M9.5 13.5L12 16l2.5-2.5"/></symbol>
   <symbol id="i-rules" viewBox="0 0 24 24"><path d="M4 6h10M4 12h16M4 18h7"/><circle cx="17" cy="6" r="2"/><circle cx="14" cy="18" r="2"/></symbol>
   <symbol id="i-set" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 01-1 1h-5v-6h-6v6H4a1 1 0 01-1-1z"/></symbol>
+  <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 17l5-6 4 4 8-9"/><path d="M15 6h5v5"/></symbol>
+  <symbol id="i-pie" viewBox="0 0 24 24"><path d="M12 3v9h9"/><path d="M21 12a9 9 0 11-9-9"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"/></symbol>
+  <symbol id="i-loop" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0114-5l2 2M20 12a8 8 0 01-14 5l-2-2"/><path d="M20 4v5h-5M4 20v-5h5"/></symbol>
+  <symbol id="i-return" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></symbol>
   <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
   <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10.9 10.9 0 0112 5c6.4 0 10 7 10 7a17.6 17.6 0 01-3.1 4.1M6.6 6.6C3.9 8.4 2 12 2 12s3.6 7 10 7a10 10 0 005.4-1.6M9.9 9.9a3 3 0 004.2 4.2"/></symbol>
 </svg>
@@ -37,17 +43,25 @@
 <aside class="side">
   <div class="brand"><span class="mark" aria-hidden="true"></span><span>aaryaai finance<small id="brandSub">local · private</small></span></div>
   <nav id="tabs">
-    <button data-tab="chat" class="on"><svg><use href="#i-chat"/></svg><span id="navAsk">Ask AI</span></button>
-    <div class="sep"></div>
-    <button data-tab="position"><svg><use href="#i-pos"/></svg><span>Position</span></button>
-    <button data-tab="money"><svg><use href="#i-money"/></svg><span>Money</span></button>
-    <button data-tab="documents"><svg><use href="#i-docs"/></svg><span>Documents</span></button>
+    <button data-tab="home" class="on"><svg><use href="#i-home"/></svg><span>Home</span></button>
+    <button data-tab="chat"><svg><use href="#i-chat"/></svg><span id="navAsk">Ask AI</span></button>
+    <div class="grp">Plan</div>
+    <button data-tab="forecast"><svg><use href="#i-wave"/></svg><span>Cash forecast</span></button>
     <button data-tab="goals"><svg><use href="#i-goal"/></svg><span>Goals</span></button>
-    <button data-tab="plan"><svg><use href="#i-plan"/></svg><span>Plan</span></button>
+    <button data-tab="diversify"><svg><use href="#i-pie"/></svg><span>Diversify</span></button>
+    <button data-tab="opportunities"><svg><use href="#i-spark"/></svg><span>Opportunities</span></button>
+    <button data-tab="plan"><svg><use href="#i-plan"/></svg><span>Budget</span></button>
+    <div class="grp">Records</div>
+    <button data-tab="money"><svg><use href="#i-money"/></svg><span>Money</span></button>
+    <button data-tab="position"><svg><use href="#i-pos"/></svg><span>Net worth</span></button>
     <button data-tab="invest"><svg><use href="#i-inv"/></svg><span>Invest</span></button>
+    <button data-tab="documents"><svg><use href="#i-docs"/></svg><span>Documents</span></button>
+    <div class="grp">Tax</div>
+    <button data-tab="taxreturn"><svg><use href="#i-return"/></svg><span>Tax return</span></button>
+    <button data-tab="tax"><svg><use href="#i-tax"/></svg><span>Deadlines</span></button>
+    <div class="grp">More</div>
     <button data-tab="learn"><svg><use href="#i-learn"/></svg><span>Learn</span></button>
-    <button data-tab="tax"><svg><use href="#i-tax"/></svg><span>Tax</span></button>
-    <div class="sep"></div>
+    <button data-tab="routines"><svg><use href="#i-loop"/></svg><span>Routines</span><b class="navcount" id="navProposals" hidden></b></button>
     <button data-tab="rules"><svg><use href="#i-rules"/></svg><span>Rules</span></button>
     <button data-tab="settings"><svg><use href="#i-set"/></svg><span>Settings</span></button>
   </nav>
@@ -60,8 +74,70 @@
 
 <main>
 <div id="updateNote" class="updnote" hidden></div>
+<!-- ============ HOME ============ -->
+<section id="home" class="tab on">
+  <div class="pagehead"><div><div class="eyebrow" id="homeDate">Home</div><h1 id="homeHello">Home</h1>
+    <p>Everything below is worked out on this computer from your own entries and rules.</p></div>
+    <span style="display:flex;gap:8px;flex-wrap:wrap" id="homeChips"></span></div>
+  <div id="homeAttention"></div>
+  <div class="kpis" id="homeKpis"></div>
+  <div class="grid g-hero" style="margin-top:16px"><div class="card" id="homeCcy"></div><div class="card" id="homeComing"></div></div>
+  <div class="grid g2"><div class="card" id="homeGoals"></div><div class="card" id="homeInbox"></div></div>
+  <div id="homeTracker"></div>
+</section>
+
+<!-- ============ CASH FORECAST ============ -->
+<section id="forecast" class="tab">
+  <div class="pagehead"><div><div class="eyebrow">Cash forecast · next 12 months</div><h1>Money in, money out, and where it comes from</h1>
+    <p>From your balances, repeating entries, planned items and staged purchases, plus what you usually spend. Each line says how sure it is.</p></div>
+    <button class="sm" onclick="editPlanned()">＋ Planned item</button></div>
+  <div class="pillrow" id="fcScenarios" role="group" aria-label="Scenario"></div>
+  <div id="fcCharts" class="grid g2"></div>
+  <div class="grid g2"><div class="card" id="fcPlan"></div><div class="card" id="fcWatch"></div></div>
+  <div class="grid g-hero"><div class="card" id="fcSources"></div><div class="card" id="fcFloors"></div></div>
+  <div class="card" id="fcPlanned"></div>
+</section>
+
+<!-- ============ DIVERSIFY ============ -->
+<section id="diversify" class="tab">
+  <div class="pagehead"><div><div class="eyebrow">Diversification check</div><h1>What you really own</h1>
+    <p>Funds are opened up to show countries, currencies, sectors and companies. Education and arithmetic, not investment advice.</p></div>
+    <span class="chip muted" id="dvTotal"></span></div>
+  <div class="grid g-hero"><div class="card" id="dvXray"></div><div style="display:grid;gap:16px;align-content:start"><div class="card" id="dvFlags"></div><div class="card" id="dvCompanies"></div></div></div>
+  <div class="grid g2"><div class="card" id="dvTargets"></div><div class="card" id="dvRules"></div></div>
+  <div class="card" id="dvOptions"></div>
+</section>
+
+<!-- ============ OPPORTUNITIES ============ -->
+<section id="opportunities" class="tab">
+  <div class="pagehead"><div><div class="eyebrow">Tax-aware opportunities</div><h1>Allowances and deadlines you'd otherwise miss</h1>
+    <p>Found by your country packs' rules from your holdings and accounts. Tax facts you can act on, or not — never a tip to buy or sell something.</p></div></div>
+  <div class="kpis" id="opKpis"></div>
+  <div id="opCards" class="opgrid" style="margin-top:16px"></div>
+  <div class="card" id="opInputs" style="margin-top:16px"></div>
+</section>
+
+<!-- ============ TAX RETURN ============ -->
+<section id="taxreturn" class="tab">
+  <div class="pagehead"><div><div class="eyebrow" id="twEyebrow">Tax return</div><h1 id="twTitle">Tax return</h1>
+    <p>Your documents, the questions a careful adviser would ask, the better way to file, and a sheet to copy from. Estimates — confirm with a tax adviser.</p></div>
+    <span style="display:flex;gap:8px;flex-wrap:wrap;align-items:center" id="twPick"></span></div>
+  <div class="steps" id="twSteps"></div>
+  <div class="grid g-hero"><div class="card" id="twQuestions"></div><div style="display:grid;gap:16px;align-content:start"><div class="card" id="twDocs"></div><div class="card" id="twAsk"></div></div></div>
+  <div class="grid g2"><div class="card" id="twOptimise"></div><div class="card" id="twSheet"></div></div>
+</section>
+
+<!-- ============ ROUTINES ============ -->
+<section id="routines" class="tab">
+  <div class="pagehead"><div><div class="eyebrow">Routines &amp; connections</div><h1>Checks that run on their own</h1>
+    <p>Routines only read your data and suggest. Nothing changes until you approve it here. Every action is in the log below.</p></div>
+    <button class="sm" onclick="runRoutines('all')">Run what's due now</button></div>
+  <div class="grid g-hero"><div class="card" id="rtProposals"></div><div class="card" id="rtList"></div></div>
+  <div class="grid g2"><div class="card" id="rtConnections"></div><div class="card" id="rtAudit"></div></div>
+</section>
+
 <!-- ============ CHAT ============ -->
-<section id="chat" class="tab on">
+<section id="chat" class="tab">
   <div class="chatwrap">
     <aside class="chatside" id="chatSide">
       <button class="newchat" onclick="newChat()">＋ New chat</button>
@@ -164,10 +240,11 @@
 
 <!-- ============ GOALS ============ -->
 <section id="goals" class="tab">
-  <div class="pagehead"><div><div class="eyebrow">Goals</div><h1>What you're saving for</h1>
-    <p>Each goal becomes one number: how much to put aside per month. Inflation and growth are included.</p></div>
+  <div class="pagehead"><div><div class="eyebrow">Goals</div><h1>What you're saving for, and how likely it is</h1>
+    <p>Each goal is replayed in 2,000 simulated markets, good years and bad, after inflation. The odds show how often it gets there.</p></div>
     <button class="sm" onclick="editGoal()">＋ New goal</button></div>
-  <div class="kpis" id="goalKpis"></div>
+  <div id="goalOdds"></div>
+  <div class="kpis" id="goalKpis" style="margin-top:16px"></div>
   <div id="goalCards" class="goalgrid" style="margin-top:16px"></div>
   <div class="grid g2">
     <div class="card"><h3>Which growth rate should I use?</h3>
@@ -184,7 +261,7 @@
 
 <!-- ============ PLAN ============ -->
 <section id="plan" class="tab">
-  <div class="pagehead"><div><div class="eyebrow">Plan</div><h1>Money in, money out</h1>
+  <div class="pagehead"><div><div class="eyebrow">Budget</div><h1>Money in, money out</h1>
     <p>The gap between take-home pay and spending is what funds every goal. Aim to save 20% or more, and keep 3–6 months of spending in cash.</p></div>
     <button class="sm" onclick="editExpense()">＋ Add spending</button></div>
   <div class="kpis" id="cfKpis"></div>
@@ -267,7 +344,7 @@
 
 <!-- ============ TAX ============ -->
 <section id="tax" class="tab">
-  <div class="pagehead"><div><div class="eyebrow" id="taxEyebrow">Tax</div><h1>Your tax desk</h1>
+  <div class="pagehead"><div><div class="eyebrow" id="taxEyebrow">Deadlines &amp; calculators</div><h1>Your tax desk</h1>
     <p>Deadlines and calculators come from your country packs and your own rules. Estimates only — confirm filings with a tax adviser.</p></div>
     <span style="display:flex;gap:10px;align-items:center"><label class="hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="showDone"> Show done</label>
     <button class="sm" onclick="addDeadline()">＋ Add my own</button></span></div>
@@ -326,5 +403,6 @@
 <dialog id="dlg"><form method="dialog" id="dlgForm" class="form"></form></dialog>
 <div id="toast" role="status"></div>
 <script src="/static/app.js"></script>
+<script src="/static/planning.js"></script>
 </body>
 </html>

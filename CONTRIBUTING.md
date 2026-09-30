@@ -112,3 +112,27 @@ Extra fields on built-in record types live in each row's `extra` JSON column, so
 - Keep it local: no telemetry, no calls home. Network access only for exchange rates, optional market prices, and the AI provider the user chose.
 - **Security:** the server only answers requests with a loopback `Host`, a same-origin `Origin` and the per-start session token (see `create_app` in `server.py`). New endpoints get this for free — don't add routes outside `/static/` that skip it. `tests/test_security.py` covers it.
 - **Never commit personal data.** `tests/test_packs.py` scans the repo for obvious personal identifiers.
+
+
+## Planning sections in a pack (0.5)
+
+Three optional sections make a country work with the planning screens. Built-in examples are in `packs/DE/pack.yaml` and `packs/IN/pack.yaml`.
+
+```yaml
+investing: {capital_gains_rate: 0.26375, equity_fund_exempt: 0.30, allowance_single: 1000}   # used for "tax if you sold"
+
+opportunities:                      # checks on the Opportunities screen; engines live in aaryaai_finance/tax/opportunities.py
+  - {id: de_fsa, engine: de_fsa, params: {allowance_single: 1000, rate: 0.26375}}
+
+tax_workspace:                      # the Tax return screen
+  title: "Germany {year}"
+  year: calendar                    # or india_fy (April–March)
+  documents:  [{id: lstb, label: Lohnsteuerbescheinigung, doc_types: [de_lohnsteuerbescheinigung], required: true}]
+  questions:  [{id: gross, section: Income, label: "Gross pay", type: number, prefill: lstb.gross}]   # also: bool, text; from_answer; default
+  derived:    [{id: homeoffice, label: Home-office allowance, value: "min(homeoffice_days, 210) * 6"}]
+  estimate:   {calculator: refund, inputs: {gross: "gross", werbungskosten: "work_expenses"}}   # results available as est_<name>
+  checks:     [{id: itemise, title: "Itemise work expenses", when: "work_expenses > 1230", detail: "…{work_expenses}…", effect: "(work_expenses - 1230) * est_marginal"}]
+  sheet:      [{form: "Anlage N", field: Bruttoarbeitslohn, value: "gross"}]   # format: money (default), days, number, bool, percent
+```
+
+Formulas are evaluated by a small safe evaluator: numbers, names of answers and derived values, `+ - * /`, comparisons, `and`/`or`/`not`, `a if cond else b`, and `min`, `max`, `round`, `abs`. Unanswered names count as 0. Anything else (attributes, strings, other calls) is refused when the pack loads, and the workspace is skipped with an error in Settings.

@@ -11,6 +11,6 @@ venv/
 secrets.json
 config.yaml
 !examples/**/config.yaml
-data/
+/data/
 aaryaai-finance-data/
 _site/

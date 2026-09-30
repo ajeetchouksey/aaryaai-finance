@@ -42,3 +42,9 @@ Deadlines come from your country packs and your answers in step 2. Tick them off
 - **Updates:** the app tells you when a new version is out. Your data is backed up automatically before any database change.
 
 Next: [how rules and country packs work](../CONTRIBUTING.md) · [connecting an AI](ai-providers.md) · [privacy](../PRIVACY.md)
+
+
+## Next steps
+
+- [Planning tools](planning.md): cash forecast, goal odds, diversification, opportunities, tax return, routines.
+- [Use your numbers in Claude Desktop or VS Code](mcp.md) through the local MCP server.

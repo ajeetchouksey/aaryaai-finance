@@ -7,7 +7,7 @@ import secrets
 import json
 import os
 import shutil
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request
@@ -76,6 +76,7 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
 
     def ctx() -> Ctx:
         return state["ctx"]
+    app.state.get_ctx = ctx
 
     @app.exception_handler(IntegrityProblem)
     async def _integrity(_req, exc: IntegrityProblem):
@@ -151,6 +152,7 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         b = c.settings.backups_dir / f"finance-before-import-{datetime.now():%Y%m%d-%H%M%S}.db"
         shutil.copy2(c.settings.db_path, b)
         counts = c.db.import_all(p.get("data") or {})
+        c.audit("You", "Imported data from JSON", json.dumps(counts)[:300])
         return {"ok": True, "imported": counts, "backup": str(b)}
 
     def need(cond, msg, code=400):
@@ -283,12 +285,15 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         rid = c.db.upsert(table, row)
         if table == "recurring":
             ledger.materialize_recurring(c.db)
+        c.audit("You", f"{'Changed' if row.get('id') else 'Added'} {c.db.model['entities'][table].get('label', table).lower()}",
+                str(row.get("name") or row.get("title") or row.get("note") or row.get("category") or f"#{rid}"))
         return {"id": rid}
 
     @app.delete("/api/{table}/{row_id}")
     def delete_row(table: str, row_id: int):
         need(table in ctx().db.tables, "Unknown table", 404)
         ctx().db.delete(table, row_id)
+        ctx().audit("You", f"Deleted {ctx().db.model['entities'][table].get('label', table).lower()}", f"#{row_id}")
         return {"ok": True}
 
     def _check_money_row(c: Ctx, table: str, row: dict):
@@ -361,6 +366,207 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         cf["income_source"] = "your setting" if s.get("monthly_income") else (f"{acts.get('basis', 'recent months')} in Money" if acts["income"] else "not set")
         cf["spend_source"] = "your budget in Plan" if budget else (f"{acts.get('basis', 'recent months')} in Money" if acts["expense"] else "not set")
         return cf
+
+
+    # ======================= home, forecast, plan, diversify, opportunities =======================
+    @app.get("/home")
+    def home():
+        c = ctx()
+        nw = c.net_worth()
+        c.db.snapshot(nw, c.base)
+        hist = _history(c)
+        f = c.forecast()
+        spend = c.monthly_spend()
+        month_start = date.today().replace(day=1).isoformat()
+        before = [h for h in hist if h["day"] < month_start]
+        change = round(nw["net_worth"] - before[-1]["net_worth"], 2) if before else None
+        attention = []
+        for st in f["plan"][:1]:
+            b = st["because"][0] if st["because"] else None
+            attention.append({"tone": "warn", "ccy": st["ccy"], "month": st["month"], "low": st["low_before"], "floor": st["floor"],
+                              "because": b, "send": st["send"], "from_ccy": st["from_ccy"], "receive": st["receive"], "date": st["date"]})
+        for w in f["watch"][:1]:
+            attention.append({"tone": "bad", "ccy": w["ccy"], "month": w["month"], "low": w["low"], "floor": f["floors"].get(w["ccy"]), "watch": True})
+        today = date.today()
+        cal = [d for d in c.calendar() if d["status"] == "open" and d["due"] and d["due"] != "ongoing"]
+        soon30 = [d for d in cal if d["due"] <= (today + timedelta(days=30)).isoformat()]
+        coming = [{"date": i["date"], "label": i["label"], "amount": i["amount"], "ccy": i["ccy"], "confidence": i["confidence"], "kind": "money"}
+                  for i in f["items"] if i["source"] != "learned" and i["date"] <= (today + timedelta(days=45)).isoformat()
+                  and abs(i["amount"]) >= 50 and i.get("category") != "Transfer"]
+        coming += [{"date": d["due"], "label": d["title"], "kind": "deadline", "severity": d["severity"], "country": d.get("country")}
+                   for d in cal if d["due"] <= (today + timedelta(days=45)).isoformat()]
+        seen, uniq = set(), []
+        for x in sorted(coming, key=lambda x: x["date"]):
+            k = (x["kind"], x["label"])
+            if k not in seen:                    # a weekly entry shows once, at its next date
+                seen.add(k)
+                uniq.append(x)
+        coming = uniq
+        g = c.goal_odds(whatif=False)
+        opp = c.opportunities()
+        from .core import routines as rt
+        pend = [dict(p) for p in c.db.list("proposals", "created DESC") if p["status"] == "pending"][:5]
+        runs = [r for r in rt.status(c) if r["last_run"]]
+        return {"base": c.base, "name": c.settings.config["profile"].get("name", ""), "net_worth": nw, "change_month": change, "history": hist[-13:],
+                "cushion_months": round(nw["liquid"] / spend, 1) if spend else None, "cushion_target": float(json.loads(c.db.settings().get("diversify_rules") or "{}").get("min_cash_months", 6)),
+                "monthly_spend": round(spend, 2), "next90": f["next90"], "deadlines30": len(soon30), "next_deadline": soon30[0] if soon30 else (cal[0] if cal else None),
+                "attention": attention, "coming": coming[:8],
+                "goals": [{k: x[k] for k in ("id", "name", "probability", "currency", "saved", "target_future", "monthly", "monthly_for_85", "target_date")} for x in g["goals"]],
+                "proposals": pend, "routines": runs[:4], "opportunities": {"count": len(opp["cards"]), "total_base": opp["total_base"],
+                                                                            "top": opp["cards"][:2]},
+                "trackers": [trk.summarize(t) for t in c.trackers], "rates": c.rates}
+
+    @app.get("/forecast")
+    def get_forecast(scenario: str = "base"):
+        c = ctx()
+        f = c.forecast(scenario)
+        f["accounts"] = [{k: a[k] for k in ("id", "name", "currency", "country", "liquid", "balance")} for a in c.accounts_with_balance()]
+        f["planned"] = c.db.list("planned", "date")
+        return f
+
+    @app.post("/forecast/floors")
+    def set_floors(p: dict = Body(...)):
+        c = ctx()
+        for k, v in p.items():
+            need(re.fullmatch(r"[A-Z]{3}", k), "Currency codes only")
+            c.db.set_setting(f"floor:{k}", "" if v in (None, "") else float(v))
+        c.audit("You", "Changed minimum balances", json.dumps(p))
+        return {"floors": c.floors()}
+
+    @app.get("/plan/odds")
+    def plan_odds():
+        return ctx().goal_odds()
+
+    @app.post("/plan/odds/try")
+    def plan_try(p: dict = Body(...)):
+        from .core import odds as od
+        g = ctx().db.get("goals", int(p["goal_id"]))
+        need(g, "No such goal", 404)
+        return od.odds(g, monthly=float(p.get("monthly") or 0))
+
+    @app.get("/diversify")
+    def diversify():
+        return ctx().diversify()
+
+    @app.post("/diversify/settings")
+    def diversify_settings(p: dict = Body(...)):
+        c = ctx()
+        from .core.portfolio import CLASSES, DEFAULT_RULES
+        if "targets" in p:
+            t = {k: float(v) for k, v in (p["targets"] or {}).items() if k in CLASSES and str(v).strip() != ""}
+            need(sum(t.values()) <= 100.5, "Targets add up to more than 100%")
+            c.db.set_setting("alloc_targets", json.dumps(t))
+        if "rules" in p:
+            r = {k: float(v) for k, v in (p["rules"] or {}).items() if k in DEFAULT_RULES and str(v).strip() != ""}
+            c.db.set_setting("diversify_rules", json.dumps(r))
+        if "monthly_investable" in p:
+            c.db.set_setting("monthly_investable", float(p["monthly_investable"] or 0))
+        c.audit("You", "Changed diversification targets and rules")
+        return c.diversify()
+
+    @app.get("/opportunities")
+    def opportunities():
+        return ctx().opportunities()
+
+    @app.post("/opportunities/inputs")
+    def opportunities_inputs(p: dict = Body(...)):
+        c = ctx()
+        for k in ("in_ltcg_used", "de_allowance_used"):
+            if k in p:
+                c.db.set_setting(k, float(p[k] or 0))
+        return c.opportunities()
+
+    # ======================= tax workspace =======================
+    @app.get("/taxws")
+    def taxws(country: str | None = None, year: int | None = None):
+        c = ctx()
+        avail = [{"code": k, "flag": v.get("flag", ""), "name": v.get("name")} for k, v in c.packs.items() if v.get("tax_workspace")]
+        need(avail, "None of your country packs has a tax workspace yet.")
+        code = country if country in [a["code"] for a in avail] else avail[0]["code"]
+        try:
+            ws = c.tax_workspace(code, year)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        ws["available"] = avail
+        prov = make_provider(c.settings.config["ai"], c.settings.secret)
+        ws["ai_ready"] = prov is not None
+        return ws
+
+    @app.post("/taxws/answers")
+    def taxws_answers(p: dict = Body(...)):
+        c = ctx()
+        need(p.get("country") in c.packs, "Unknown country")
+        c.save_tax_answers(p["country"], int(p["year"]), p.get("answers") or {})
+        c.audit("You", f"Updated tax answers {p['country']} {p['year']}", ", ".join(list((p.get("answers") or {}).keys())[:8]))
+        return taxws(p["country"], int(p["year"]))
+
+    @app.post("/taxws/ask")
+    def taxws_ask(p: dict = Body(...)):
+        from .tax.workspace import followup_prompt
+        c = ctx()
+        prov = make_provider(c.settings.config["ai"], c.settings.secret)
+        need(prov, "Connect an AI provider in Settings to get a follow-up question. The standard questions work without it.")
+        ws = c.tax_workspace(p["country"], int(p["year"]))
+        try:
+            q = prov.complete(followup_prompt(ws))
+        except ProviderError as e:
+            raise HTTPException(400, str(e))
+        c.audit("AI · " + c.settings.config["ai"].get("provider", ""), f"Asked a tax follow-up for {ws['title']}")
+        return {"question": q.strip()[:800], "provider": c.settings.config["ai"].get("provider")}
+
+    @app.get("/taxws/export")
+    def taxws_export(country: str, year: int, fmt: str = "csv"):
+        from .tax.workspace import sheet_csv
+        c = ctx()
+        ws = c.tax_workspace(country, year)
+        name = f"tax-{country}-{year}"
+        c.audit("You", f"Exported {ws['title']} ({fmt})")
+        if fmt == "json":
+            body = json.dumps({k: ws[k] for k in ("title", "year_label", "documents", "questions", "derived", "checks", "sheet", "estimate")}, ensure_ascii=False, indent=1, default=str)
+            return StreamingResponse(iter([body]), media_type="application/json", headers={"Content-Disposition": f'attachment; filename="{name}.json"'})
+        return StreamingResponse(iter(["\ufeff" + sheet_csv(ws)]), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{name}.csv"'})
+
+    # ======================= routines, proposals, audit, MCP =======================
+    @app.get("/routines")
+    def routines_list():
+        from .core import routines as rt
+        from .mcp_server import config_snippet
+        c = ctx()
+        prov_cfg = c.settings.config["ai"]
+        audit = c.db.list("audit", "ts DESC, id DESC")[:40]
+        mcp_last = next((a for a in audit if (a.get("actor") or "").startswith("MCP")), None)
+        return {"routines": rt.status(c), "proposals": c.db.list("proposals", "created DESC")[:40], "audit": audit,
+                "ai": {"provider": prov_cfg.get("provider"), "ready": make_provider(prov_cfg, c.settings.secret) is not None,
+                       "label": PROVIDERS.get(prov_cfg.get("provider"), {}).get("label"), "model": prov_cfg.get("model", "")},
+                "ai_summary": c.db.settings().get("routines:ai_summary", "1") != "0",
+                "mcp": {"config": config_snippet(c.settings.data_dir), "last": mcp_last}}
+
+    @app.post("/routines/run")
+    def routines_run(p: dict = Body(...)):
+        from .core import routines as rt
+        need(p.get("id") in rt.RUNNERS or p.get("id") == "all", "Unknown routine")
+        c = ctx()
+        res = rt.run_due(c) if p["id"] == "all" else [rt.run(c, p["id"], actor="You (run now)")]
+        return {"ran": res, **routines_list()}
+
+    @app.post("/routines/settings")
+    def routines_settings(p: dict = Body(...)):
+        from .core import routines as rt
+        c = ctx()
+        for k, v in (p.get("enabled") or {}).items():
+            if k in rt.RUNNERS:
+                c.db.set_setting(f"routine:{k}", "1" if v else "0")
+        if "ai_summary" in p:
+            c.db.set_setting("routines:ai_summary", "1" if p["ai_summary"] else "0")
+        return routines_list()
+
+    @app.post("/proposals/{pid}")
+    def decide(pid: int, p: dict = Body(...)):
+        need(p.get("decision") in ("approve", "skip"), "decision must be approve or skip")
+        try:
+            return ctx().decide(pid, p["decision"])
+        except (ValueError, KeyError) as e:
+            raise HTTPException(400, str(e))
 
     @app.get("/api-settings")
     def app_settings():

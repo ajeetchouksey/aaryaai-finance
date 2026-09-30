@@ -51,7 +51,7 @@ version = { attr = "aaryaai_finance.__version__" }
 include = ["aaryaai_finance*"]
 
 [tool.setuptools.package-data]
-aaryaai_finance = ["web/*", "web/**/*", "packs/*/*.yaml", "packs/_template/*", "model/*.json"]
+aaryaai_finance = ["web/*", "web/**/*", "packs/*/*.yaml", "packs/_template/*", "model/*.json", "data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

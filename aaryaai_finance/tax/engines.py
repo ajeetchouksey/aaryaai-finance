@@ -109,7 +109,9 @@ def de_refund(p, i, ccy):
                      ["Average rate", f"{(total / zve if zve else 0):.1%}"], ["Marginal rate", f"{nxt / 100:.0%}"]],
             "explanation": (f"Taxable income comes out at {fmt(zve, ccy)}. Tax on that is about {fmt(total, ccy)}; "
                             f"{fmt(withheld, ccy)} was withheld. Each extra €100 of deductions saves about €{nxt:.0f}. "
-                            "Rough estimate — ELSTER will differ for child allowances, insurance caps and foreign income.")}
+                            "Rough estimate — ELSTER will differ for child allowances, insurance caps and foreign income."),
+            "data": {"zve": zve, "tax": total, "withheld": withheld, "refund": refund, "avg_rate": round(total / zve, 4) if zve else 0.0,
+                     "marginal": round(nxt / 100, 4)}}
 
 
 @engine("de_capital")
@@ -166,7 +168,9 @@ def in_regimes(p, i, ccy):
     expl += "Your deductions don't beat the new regime's lower rates." if better == "new" else "Your deductions outweigh the new regime's lower rates."
     return {"headline": f"{better.title()} regime", "headline_label": f"saves {fmt(saving, ccy)}", "tone": "good",
             "table": {"columns": ["", "New", "Old"], "rows": [[l, fmt(n[k], ccy), fmt(o[k], ccy)] for l, k in rows]},
-            "rows": [], "explanation": expl}
+            "rows": [], "explanation": expl,
+            "data": {"new_total": n["total"], "old_total": o["total"], "best_total": min(n["total"], o["total"]), "better_new": better == "new",
+                     "saving": saving}}
 
 
 @engine("in_property_tds")

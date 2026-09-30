@@ -109,6 +109,8 @@ document_rules:
     match: {text_all: [lohnsteuerbescheinigung], filename_any: [lohnsteuerbescheinigung]}
     extract:
       - {name: tax_year, source: squashed, pattern: "lohnsteuerbescheinigungf(?:ü|u)r(20\\d{2})"}
+      - {name: gross, pattern: "Bruttoarbeitslohn[^\\n\\d]{0,80}?(\\d[\\d.]{0,12},\\d{2})"}
+      - {name: lohnsteuer, pattern: "Einbehaltene Lohnsteuer[^\\n\\d]{0,80}?(\\d[\\d.]{0,12},\\d{2})"}
     route: {folder: "{folder:DE}", filename: "Lohnsteuerbescheinigung {tax_year}{ext}"}
   - id: de_tax_return
     label: German income tax return (Einkommensteuererklärung)
@@ -180,6 +182,104 @@ glossary:
   Abgeltungsteuer: "Flat ~26.4% tax (incl. Soli) on interest, dividends and gains."
   Freistellungsauftrag: "Instruction to a bank to pay out investment income tax-free up to your allowance."
 
+# Tax facts for investing: used by Diversify (tax if you sold) and Opportunities.
+investing: {capital_gains_rate: 0.26375, equity_fund_exempt: 0.30, allowance_single: 1000}
+
+# Tax-aware checks shown on the Opportunities screen (engines in aaryaai_finance/tax/opportunities.py).
+opportunities:
+  - id: de_fsa
+    engine: de_fsa
+    params: {allowance_single: 1000, rate: 0.26375}
+  - id: de_vorabpauschale
+    engine: de_vorabpauschale
+    # Basiszins published by the Federal Ministry of Finance each January (BMF letter). Check and update.
+    params: {basiszins: {2025: 0.0253, 2026: 0.0320}, factor: 0.7, rate: 0.26375, equity_fund_exempt: 0.30}
+  - id: de_loss_certificate
+    engine: de_loss_certificate
+    params: {deadline: "12-15", rate: 0.26375}
+
+# The tax-year workspace (Tax return screen). Formulas: numbers, + - * /, comparisons, and/or, min/max/round, "a if c else b".
+tax_workspace:
+  title: "Germany {year}"
+  year: calendar
+  filing_hint: "Copy the values into ELSTER (Mein ELSTER → Einkommensteuererklärung) or hand the export to your adviser."
+  documents:
+    - {id: lstb, label: "Lohnsteuerbescheinigung", doc_types: [de_lohnsteuerbescheinigung], required: true, why: "gross pay and wage tax withheld"}
+    - {id: broker, label: "Broker annual tax statement (Jahressteuerbescheinigung)", doc_types: [de_broker], why: "investment income and tax already paid"}
+    - {id: receipts, label: "Receipts for work expenses", doc_types: [de_receipt], why: "laptop, courses, work equipment"}
+    - {id: last_assessment, label: "Last year's tax assessment", doc_types: [de_tax_assessment], year_offset: -1, why: "losses carried forward, prepayments"}
+  questions:
+    - {id: gross, section: Income, label: "Gross pay (Lohnsteuerbescheinigung, line 3)", type: number, prefill: lstb.gross}
+    - {id: lohnsteuer, section: Income, label: "Wage tax withheld (line 4)", type: number, prefill: lstb.lohnsteuer}
+    - {id: soli_paid, section: Income, label: "Solidarity surcharge withheld (line 5)", type: number, default: 0}
+    - {id: joint, section: You, label: "Married and filing jointly?", type: bool, from_answer: de_joint}
+    - {id: church, section: You, label: "Church tax?", type: bool, from_answer: de_church}
+    - {id: commute_km, section: Work expenses, label: "Distance to your regular workplace (km, one way)", type: number, default: 0}
+    - {id: commute_days, section: Work expenses, label: "Days you travelled there", type: number, default: 0}
+    - {id: homeoffice_days, section: Work expenses, label: "Days you worked from home (not on commute days)", type: number, default: 0, help: "€6 a day, up to 210 days."}
+    - {id: other_work, section: Work expenses, label: "Other work expenses (courses, laptop share, work phone…)", type: number, default: 0}
+    - {id: vorsorge, section: Deductions, label: "Deductible insurance you paid yourself (Vorsorge)", type: number, default: 0, help: "Leave 0 if unsure: ELSTER fills most from your employer's data."}
+    - {id: children, section: Deductions, label: "Children under 14 in childcare", type: number, default: 0}
+    - {id: childcare, section: Deductions, label: "Childcare costs paid (Kita, day-care; not meals)", type: number, default: 0}
+    - {id: donations, section: Deductions, label: "Donations", type: number, default: 0}
+    - {id: capital_income, section: Investments, label: "German investment income taxed this year (all banks)", type: number, default: 0}
+    - {id: foreign_interest, section: Investments, label: "Foreign interest and dividends (e.g. Indian FD interest in €)", type: number, default: 0}
+    - {id: foreign_tax, section: Investments, label: "Tax already paid abroad on that (in €)", type: number, default: 0}
+  derived:
+    - {id: commute, label: "Commuting allowance", value: "commute_days * (min(commute_km, 20) * 0.30 + max(commute_km - 20, 0) * 0.38) if year <= 2025 else commute_days * commute_km * 0.38"}
+    - {id: homeoffice, label: "Home-office allowance", value: "min(homeoffice_days, 210) * 6"}
+    - {id: work_expenses, label: "Work expenses in total", value: "commute + homeoffice + other_work"}
+    - {id: childcare_deduction, label: "Childcare you can deduct", value: "min(childcare * 0.8, 4800 * max(children, 1)) if year >= 2025 else min(childcare * 2 / 3, 4000 * max(children, 1))"}
+    - {id: other_deductions, label: "Other deductions", value: "childcare_deduction + donations"}
+    - {id: foreign_credit, label: "Foreign tax you can credit", value: "min(foreign_tax, foreign_interest * 0.25)"}
+  estimate:
+    calculator: refund
+    inputs: {year: "year", gross: "gross", lohnsteuer: "lohnsteuer", soli_paid: "soli_paid", werbungskosten: "work_expenses", vorsorge: "vorsorge", other: "other_deductions", joint: "joint", church: "church"}
+  checks:
+    - id: above_lump_sum
+      title: "Itemise your work expenses"
+      when: "work_expenses > 1230"
+      detail: "Your work expenses ({work_expenses}) are above the €1,230 everyone gets automatically, so listing them lowers your tax."
+      effect: "(work_expenses - 1230) * est_marginal"
+    - id: below_lump_sum
+      title: "No need to itemise work expenses"
+      when: "work_expenses > 0 and work_expenses <= 1230"
+      detail: "At {work_expenses} you're below the automatic €1,230 — the lump sum is used anyway."
+      tone: muted
+    - id: guenstiger
+      title: "Tick the Günstigerprüfung (Anlage KAP)"
+      when: "capital_income > 0 and est_avg_rate < 0.25"
+      detail: "Your average rate is about {est_avg_rate|percent}, below the 25% flat rate on investment income. The tax office then taxes it at your lower rate."
+      effect: "capital_income * (0.25 - est_avg_rate) * 1.055"
+    - id: foreign_credit
+      title: "Claim the tax paid abroad (Anlage KAP)"
+      when: "foreign_interest > 0 and foreign_tax > 0"
+      detail: "Foreign interest of {foreign_interest}: up to {foreign_credit} of the tax paid abroad is credited against German tax under the treaty."
+      effect: "foreign_credit"
+    - id: declare_foreign
+      title: "Declare foreign interest even if taxed abroad"
+      when: "foreign_interest > 0 and foreign_tax == 0"
+      detail: "As a German resident your worldwide income counts. Foreign interest of {foreign_interest} goes into Anlage KAP."
+      tone: muted
+    - id: childcare
+      title: "Deduct childcare"
+      when: "childcare > 0"
+      detail: "{childcare_deduction} of your childcare costs count as special expenses (Anlage Kind)."
+      effect: "childcare_deduction * est_marginal"
+  sheet:
+    - {form: "Anlage N", field: "Bruttoarbeitslohn", value: "gross"}
+    - {form: "Anlage N", field: "Einbehaltene Lohnsteuer", value: "lohnsteuer"}
+    - {form: "Anlage N", field: "Erste Tätigkeitsstätte: Arbeitstage", value: "commute_days", format: days, skip_zero: true}
+    - {form: "Anlage N", field: "Erste Tätigkeitsstätte: einfache Entfernung (km)", value: "commute_km", format: number, skip_zero: true}
+    - {form: "Anlage N", field: "Tagespauschale Homeoffice: Tage", value: "min(homeoffice_days, 210)", format: days, skip_zero: true}
+    - {form: "Anlage N", field: "Weitere Werbungskosten", value: "other_work", skip_zero: true}
+    - {form: "Anlage KAP", field: "Günstigerprüfung beantragen", value: "capital_income > 0 and est_avg_rate < 0.25", format: bool}
+    - {form: "Anlage KAP", field: "Ausländische Kapitalerträge", value: "foreign_interest", skip_zero: true}
+    - {form: "Anlage KAP", field: "Anrechenbare ausländische Steuer", value: "foreign_credit", skip_zero: true}
+    - {form: "Anlage Kind", field: "Kinderbetreuungskosten", value: "childcare", skip_zero: true}
+    - {form: "Sonderausgaben", field: "Spenden", value: "donations", skip_zero: true}
+    - {form: "Result", field: "Estimated refund (+) or payment (−)", value: "est_refund"}
+
 # Extra fields this country adds to the data model (stored with each record; see CONTRIBUTING.md).
 model:
   extends:
@@ -189,3 +289,11 @@ model:
           type: money
           label: "Freistellungsauftrag at this bank (€)"
           help: "Share of your €1,000 / €2,000 tax-free allowance given to this bank. The total across banks must not exceed it."
+        de_capital_income_ytd:
+          type: money
+          label: "Investment income at this bank this year (€)"
+          help: "Interest, dividends and realised gains so far this year (see the bank's tax overview). Used by Opportunities."
+        de_losses_ytd:
+          type: money
+          label: "Losses at this bank this year (€)"
+          help: "Unused losses in this bank's loss pot (Verlusttopf). Used to remind you about a Verlustbescheinigung."

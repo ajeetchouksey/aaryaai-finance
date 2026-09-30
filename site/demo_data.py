@@ -19,11 +19,8 @@ sys.path.insert(0, str(ROOT))
 
 def _months_ago(n: int, day: int = 1) -> date:
     t = date.today()
-    y, m = t.year, t.month - n
-    while m <= 0:
-        m += 12
-        y -= 1
-    return date(y, m, min(day, 28))
+    y, m = divmod(t.year * 12 + t.month - 1 - n, 12)
+    return date(y, m + 1, min(day, 28))
 
 
 def _pdf(text: str) -> bytes:
@@ -60,6 +57,9 @@ def build(data_dir: Path) -> Path:
     (data_dir / "trackers").mkdir()
     flat = yaml.safe_load((ROOT / "examples/trackers/example-flat.yaml").read_text(encoding="utf-8"))
     flat["subtitle"] = "2 BHK · under construction · sample data"
+    flat["tds_rate"] = 0.01
+    nxt = _months_ago(-5, 10)
+    flat["stages"][3].update({"due": nxt.isoformat(), "amount": 703000})   # next stage: demand letter already received
     (data_dir / "trackers/example-flat.yaml").write_text(yaml.safe_dump(flat, allow_unicode=True, sort_keys=False), encoding="utf-8")
     (data_dir / "model.json").write_text(json.dumps({"entities": {"policies": {"label": "Insurance policy", "fields": {
         "name": {"type": "text", "required": True, "label": "Policy"},
@@ -77,6 +77,7 @@ def build(data_dir: Path) -> Path:
         "India/Bank/{y}-{m}_AccountStatement.pdf": "Account Statement NRE sample bank",
         "India/Property/TDS/AB12345678_Statement.pdf": "Form 26QB statement Acknowledgement Number AB12345678",
         "India/Property/Riverside/Milestones/03_Plinth_{py2}/Demand_letter.pdf": "Riverside Towers demand letter plinth",
+        "Germany/Investments/Jahressteuerbescheinigung {py}.pdf": "Jahressteuerbescheinigung {py} Sample Broker Depot",
     }
     lm = _months_ago(1)
     fill = {"y": lm.year, "m": f"{lm.month:02d}", "py": today.year - 1, "py2": f"{today.year - 1}-06"}
@@ -102,9 +103,13 @@ def build(data_dir: Path) -> Path:
     giro = A(name="Girokonto", institution="Sample Bank", country="DE", currency="EUR", type="Current account",
              opening_balance=3200, opening_date=_months_ago(7).isoformat(), liquid=1)
     tages = A(name="Tagesgeld", institution="Sample Direktbank", country="DE", currency="EUR", type="Savings account",
-              opening_balance=18500, opening_date=_months_ago(7).isoformat(), liquid=1, de_freistellungsauftrag=1000)
+              opening_balance=18500, opening_date=_months_ago(7).isoformat(), liquid=1, de_freistellungsauftrag=800, de_capital_income_ytd=140)
     nre = A(name="NRE savings", institution="Sample Bank India", country="IN", currency="INR", type="Savings account",
-            opening_balance=420000, opening_date=_months_ago(7).isoformat(), liquid=1, in_account_kind="NRE")
+            opening_balance=240000, opening_date=_months_ago(7).isoformat(), liquid=1, in_account_kind="NRE")
+    depot = A(name="Broker cash", institution="Sample Broker", country="DE", currency="EUR", type="Broker / Depot",
+              opening_balance=300, opening_date=_months_ago(7).isoformat(), liquid=1, de_freistellungsauftrag=200, de_capital_income_ytd=1240)
+    bankb = A(name="Bank B", institution="Sample Bank B", country="DE", currency="EUR", type="Savings account",
+              opening_balance=1500, opening_date=_months_ago(7).isoformat(), liquid=1, de_losses_ytd=320)
     nro = A(name="NRO savings", institution="Sample Bank India", country="IN", currency="INR", type="Savings account",
             opening_balance=185000, opening_date=_months_ago(7).isoformat(), liquid=1, in_account_kind="NRO")
 
@@ -132,17 +137,42 @@ def build(data_dir: Path) -> Path:
                         "amount": 2850000, "currency": "INR", "country": "IN", "updated": today.isoformat(), "note": "See the Riverside tracker on Position"})
     db.upsert("items", {"name": "Company pension (bAV)", "kind": "asset", "category": "Retirement / pension", "amount": 11800, "currency": "EUR", "country": "DE", "updated": today.isoformat()})
 
-    db.upsert("holdings", {"name": "FTSE All-World ETF", "ticker": "VWCE.DE", "asset_type": "ETF", "country": "DE", "account": "Sample broker",
-                           "qty": 85, "avg_cost": 98.4, "currency": "EUR", "last_price": 121.3, "price_date": today.isoformat()})
-    db.upsert("holdings", {"name": "Nifty 50 index fund", "ticker": "", "asset_type": "Mutual fund", "country": "IN", "account": "Sample AMC",
-                           "qty": 1200, "avg_cost": 180, "currency": "INR", "last_price": 236, "price_date": today.isoformat()})
+    H = lambda **r: db.upsert("holdings", {"price_date": today.isoformat(), "asset_class": "shares", "payout": "accumulating", **r})  # noqa: E731
+    H(name="FTSE All-World ETF", ticker="VWCE.DE", asset_type="ETF", country="DE", account="Sample broker", qty=85, avg_cost=98.4,
+      currency="EUR", last_price=121.3, bought=_months_ago(30, 12).isoformat(), ter=0.0019)
+    H(name="Nasdaq 100 ETF", ticker="EQQQ.DE", asset_type="ETF", country="DE", account="Sample broker", qty=14, avg_cost=390,
+      currency="EUR", last_price=512, bought=_months_ago(20, 3).isoformat(), ter=0.003)
+    H(name="Global bond ETF (EUR hedged)", ticker="AGGH.MI", asset_type="ETF", country="DE", account="Sample broker", qty=260, avg_cost=5.1,
+      currency="EUR", last_price=5.2, asset_class="bonds", payout="distributing", bought=_months_ago(14, 5).isoformat(), ter=0.001)
+    H(name="Nifty 50 index fund", ticker="", asset_type="Mutual fund", country="IN", account="Sample AMC", qty=1200, avg_cost=180,
+      currency="INR", last_price=236, bought=_months_ago(26, 8).isoformat(), ter=0.002)
+    H(name="Nifty 50 index fund (2nd lot)", ticker="", asset_type="Mutual fund", country="IN", account="Sample AMC", qty=400, avg_cost=205,
+      currency="INR", last_price=236, bought=(today - timedelta(days=340)).isoformat(), ter=0.002)
 
-    db.upsert("goals", {"name": "Emergency fund (6 months)", "target_today": 20000, "currency": "EUR", "target_date": date(today.year + 1, 6, 30).isoformat(),
-                        "saved": 12500, "monthly": 450, "annual_return": 0.02, "inflation": 0.02, "priority": 1})
-    db.upsert("goals", {"name": "Flat: remaining instalments", "target_today": 7300000, "currency": "INR", "target_date": "2028-06-30",
-                        "saved": 600000, "monthly": 90000, "annual_return": 0.065, "inflation": 0.0, "priority": 1})
-    db.upsert("goals", {"name": "Child's university", "target_today": 60000, "currency": "EUR", "target_date": date(today.year + 12, 9, 1).isoformat(),
-                        "saved": 4000, "monthly": 250, "annual_return": 0.06, "inflation": 0.025, "priority": 2})
+    db.upsert("goals", {"name": "Emergency fund (6 months)", "target_today": 18000, "currency": "EUR", "target_date": date(today.year + 1, 6, 30).isoformat(),
+                        "saved": 15200, "monthly": 350, "annual_return": 0.02, "inflation": 0.02, "priority": 1, "risk": "cash"})
+    db.upsert("goals", {"name": "Flat interiors", "target_today": 900000, "currency": "INR", "target_date": date(today.year + 1, 12, 31).isoformat(),
+                        "saved": 640000, "monthly": 18000, "annual_return": 0.065, "inflation": 0.05, "priority": 2, "risk": "cash"})
+    db.upsert("goals", {"name": "Child's university", "target_today": 40000, "currency": "EUR", "target_date": date(today.year + 12, 9, 1).isoformat(),
+                        "saved": 7400, "monthly": 200, "annual_return": 0.045, "inflation": 0.02, "priority": 2, "risk": "balanced"})
+    db.upsert("goals", {"name": "Retirement top-up at 60", "target_today": 450000, "currency": "EUR", "target_date": date(today.year + 25, 1, 1).isoformat(),
+                        "saved": 61200, "monthly": 700, "annual_return": 0.06, "inflation": 0.02, "priority": 3, "risk": "glide"})
+
+    # ---- planned items the forecast should know about
+    P = lambda **r: db.upsert("planned", r)  # noqa: E731
+    P(date=_months_ago(-3, 18).isoformat(), kind="expense", account_id=giro, amount=900, category="Shopping", note="Christmas and gifts", confidence="estimated")
+    P(date=_months_ago(-6, 25).isoformat(), kind="income", account_id=giro, amount=3200, category="Bonus", note="Yearly bonus", confidence="estimated")
+    P(date=_months_ago(-10, 5).isoformat(), kind="expense", account_id=giro, amount=2400, category="Travel", note="Summer holiday", confidence="planned")
+
+    # ---- settings for Diversify and Opportunities
+    db.set_setting("alloc_targets", json.dumps({"shares": 40, "bonds": 10, "cash": 20}))
+    db.set_setting("monthly_investable", 600)
+    db.set_setting("floor:EUR", 9000)
+    db.set_setting("floor:INR", 50000)
+    db.set_setting("in_ltcg_used", 38000)
+    c.save_tax_answers("DE", today.year - 1, {"gross": 68400, "lohnsteuer": 11982, "commute_km": 18, "commute_days": 42, "homeoffice_days": 180,
+                                              "other_work": 390, "children": 1, "childcare": 3350, "capital_income": 1240,
+                                              "foreign_interest": 620, "foreign_tax": 62})
 
     for cat, amt in [("Rent / Warmmiete", 1450), ("Groceries", 500), ("Utilities & internet", 89), ("Transport", 58), ("Eating out", 180),
                      ("Insurance", 120), ("Shopping", 150), ("Travel", 150), ("Subscriptions", 35)]:
@@ -159,6 +189,10 @@ def build(data_dir: Path) -> Path:
             nw = round(now - i * 1350 + (700 if i % 4 == 0 else -300 if i % 3 == 0 else 0))
             con.execute("INSERT OR REPLACE INTO snapshots (day, net_worth, assets, liabilities, currency) VALUES (?,?,?,?,?)",
                         (d.isoformat(), nw, nw + 6200, 6200, "EUR"))
+    # ---- let the routines run once so Home and Routines have something to show
+    from aaryaai_finance.core import routines
+    for rid in routines.RUNNERS:
+        routines.run(c, rid)
     return data_dir
 
 

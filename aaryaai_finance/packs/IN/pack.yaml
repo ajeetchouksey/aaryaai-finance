@@ -174,6 +174,88 @@ glossary:
   "26QB / Form 141": "The form a property buyer uses to deposit 1% TDS. 26QB until March 2026, Form 141 from April 2026."
   DTAA: "A double tax treaty — decides which country taxes what and credits tax paid in the other."
 
+# Tax facts for investing: used by Diversify (tax if you sold) and Opportunities.
+investing: {stcg_equity: 0.20, ltcg_equity: 0.125, ltcg_exempt: 125000, long_term_months: 12}
+
+# Tax-aware checks shown on the Opportunities screen (engines in aaryaai_finance/tax/opportunities.py).
+opportunities:
+  - id: in_ltcg_harvest
+    engine: in_ltcg_harvest
+    params: {ltcg_exempt: 125000, ltcg_rate: 0.125, long_term_months: 12}
+  - id: in_short_to_long
+    engine: in_short_to_long
+    params: {long_term_months: 12, window_days: 60, stcg_rate: 0.20, ltcg_rate: 0.125}
+
+# The tax-year workspace (Tax return screen). Financial year April–March.
+tax_workspace:
+  title: "India {year}"
+  year: india_fy
+  filing_hint: "File ITR-2 on the income-tax e-filing portal, or hand the export to your CA. Check AIS / 26AS first: it lists what banks reported."
+  documents:
+    - {id: ais, label: "AIS / Form 26AS", doc_types: [in_income_tax], required: true, why: "what banks and brokers reported, TDS credited"}
+    - {id: cas, label: "Mutual-fund capital gains statement (CAS)", doc_types: [in_cas], why: "short- and long-term gains"}
+    - {id: bank, label: "Bank interest certificates / statements", doc_types: [in_bank_statement], why: "NRO / FD interest"}
+    - {id: property_tds, label: "Property TDS statements (26QB / Form 141)", doc_types: [in_tds_statement, in_tds_challan], why: "keep for the purchase cost records"}
+  questions:
+    - {id: resident, section: You, label: "Resident in India this year (not NRI)?", type: bool, from_answer: "!in_nri"}
+    - {id: nro_interest, section: Income, label: "NRO / FD / savings interest (taxable)", type: number, default: 0}
+    - {id: nre_interest, section: Income, label: "NRE interest (tax-free in India, for your records)", type: number, default: 0}
+    - {id: rent, section: Income, label: "Rent received", type: number, default: 0}
+    - {id: municipal_tax, section: Income, label: "Municipal tax paid on the let property", type: number, default: 0}
+    - {id: stcg, section: Capital gains, label: "Short-term gains on equity funds / shares", type: number, default: 0}
+    - {id: ltcg, section: Capital gains, label: "Long-term gains on equity funds / shares", type: number, default: 0}
+    - {id: tds, section: Taxes paid, label: "TDS deducted (from AIS / 26AS)", type: number, default: 0}
+    - {id: advance_tax, section: Taxes paid, label: "Advance / self-assessment tax paid", type: number, default: 0}
+  derived:
+    - {id: house_property, label: "Income from house property (after 30% standard deduction)", value: "max(rent - municipal_tax, 0) * 0.7"}
+    - {id: other_income, label: "Other taxable income", value: "nro_interest + house_property"}
+    - {id: paid, label: "Tax already paid", value: "tds + advance_tax"}
+  estimate:
+    calculator: regimes
+    inputs: {resident: "resident", salary: "0", other_income: "other_income", stcg_equity: "stcg", ltcg_equity: "ltcg"}
+  checks:
+    - id: refund
+      title: "Claim back excess TDS"
+      when: "paid > est_best_total"
+      detail: "{paid} was deducted or paid, the tax works out at about {est_best_total}. File to get the difference back."
+      effect: "paid - est_best_total"
+    - id: pay_more
+      title: "Tax still to pay"
+      when: "paid < est_best_total"
+      detail: "About {est_best_total} is due and {paid} is paid. Pay the rest as self-assessment tax before filing."
+      effect: "paid - est_best_total"
+      tone: bad
+    - id: regime_new
+      title: "Use the new regime"
+      when: "est_saving > 0 and est_better_new"
+      detail: "The new regime is cheaper by {est_saving} on these figures."
+      effect: "est_saving"
+    - id: regime_old
+      title: "Use the old regime"
+      when: "est_saving > 0 and not est_better_new"
+      detail: "Your deductions make the old regime cheaper by {est_saving}. You must opt for it when filing."
+      effect: "est_saving"
+    - id: treaty
+      title: "Lower TDS on NRO interest next year"
+      when: "resident == 0 and nro_interest > 0"
+      detail: "Banks deduct about 31% on NRO interest. With a tax-residence certificate and Form 10F, the treaty rate (often 10–15%) applies."
+      tone: muted
+    - id: ltcg_free
+      title: "Long-term gains inside the yearly allowance"
+      when: "ltcg > 0 and ltcg <= 125000"
+      detail: "Your long-term equity gains of {ltcg} are within the ₹1.25 lakh tax-free allowance."
+      tone: muted
+  sheet:
+    - {form: "ITR-2 · Schedule OS", field: "Interest (NRO, FD, savings)", value: "nro_interest", skip_zero: true}
+    - {form: "ITR-2 · Schedule EI", field: "Exempt NRE interest", value: "nre_interest", skip_zero: true}
+    - {form: "ITR-2 · Schedule HP", field: "Rent received", value: "rent", skip_zero: true}
+    - {form: "ITR-2 · Schedule HP", field: "Municipal tax paid", value: "municipal_tax", skip_zero: true}
+    - {form: "ITR-2 · Schedule CG", field: "Short-term gains (equity, STT paid)", value: "stcg", skip_zero: true}
+    - {form: "ITR-2 · Schedule 112A", field: "Long-term gains (equity)", value: "ltcg", skip_zero: true}
+    - {form: "ITR-2 · Schedule TDS", field: "TDS claimed", value: "tds", skip_zero: true}
+    - {form: "Result", field: "Estimated tax (cheaper regime)", value: "est_best_total"}
+    - {form: "Result", field: "Refund (+) or payable (−)", value: "paid - est_best_total"}
+
 # Extra fields this country adds to the data model (stored with each record; see CONTRIBUTING.md).
 model:
   extends:
