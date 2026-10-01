@@ -147,6 +147,13 @@ class Server:
         return {"jsonrpc": "2.0", "id": mid, "error": {"code": code, "message": message}}
 
     def serve(self, inp=None, out=None):
+        if inp is None:
+            # MCP messages are UTF-8. On Windows a piped stdin/stdout defaults to the console code page (e.g. cp1252).
+            for stream in (sys.stdin, sys.stdout):
+                try:
+                    stream.reconfigure(encoding="utf-8", newline="\n")
+                except (AttributeError, ValueError):
+                    pass
         inp, out = inp or sys.stdin, out or sys.stdout
         for line in inp:
             line = line.strip()
@@ -160,7 +167,8 @@ class Server:
             batch = msg if isinstance(msg, list) else [msg]
             replies = [r for r in (self.handle(m) for m in batch if isinstance(m, dict)) if r]
             if replies:
-                out.write(json.dumps(replies if isinstance(msg, list) else replies[0], ensure_ascii=False, default=str) + "\n")
+                # ASCII-only JSON (non-ASCII as \\uXXXX) is valid for every client and can't fail on any console encoding
+                out.write(json.dumps(replies if isinstance(msg, list) else replies[0], ensure_ascii=True, default=str) + "\n")
                 out.flush()
 
 

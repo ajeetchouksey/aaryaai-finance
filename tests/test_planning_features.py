@@ -379,3 +379,17 @@ def test_settings_are_isolated():
             for p in ms.config_paths(client, plat):
                 assert "isolated-home" in str(p), p
     assert "isolated-home" in os.environ["LOCALAPPDATA"]
+
+
+def test_mcp_server_output_survives_a_non_utf8_console(client, tmp_path):
+    """Windows pipes default to cp1252; tool results contain €, ₹ and →. Output must still be written and parse."""
+    from aaryaai_finance.mcp_server import Server
+    raw = io.BytesIO()
+    out = io.TextIOWrapper(raw, encoding="cp1252", newline="\n")
+    inp = io.StringIO(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}) + "\n"
+                      + json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "cash_forecast", "arguments": {}}}) + "\n")
+    Server(tmp_path / "data").serve(inp, out)
+    out.flush()
+    lines = raw.getvalue().decode("ascii").splitlines()
+    assert len(lines) == 2 and "→" in json.dumps(json.loads(lines[0]), ensure_ascii=False) + "→"
+    assert json.loads(json.loads(lines[1])["result"]["content"][0]["text"])["base"] == "EUR"

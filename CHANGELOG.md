@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.2 — 2026-10-01
+
+### Fixes
+- MCP server on Windows: replies containing €, ₹ or arrows could stop the server when Claude Desktop or VS Code started it (the pipe used the console code page). It now reads UTF-8 and writes ASCII-safe JSON.
+- Connecting an MCP app twice within one second no longer overwrites the earlier backup of its settings file.
+
+
 ## 0.5.1 — 2026-10-01
 
 ### One-click MCP setup
