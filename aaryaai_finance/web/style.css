@@ -726,3 +726,4 @@ pre.code{font:12.5px/1.5 var(--num);background:rgba(8,14,26,.7);border:1px solid
 }
 label.chk{font-size:14px;color:var(--ink2);margin:6px 0}
 label.chk input{width:auto;margin:0;flex:none}
+#toast{max-width:min(560px,92vw);white-space:normal;text-align:center}

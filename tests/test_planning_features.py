@@ -268,3 +268,114 @@ def test_mcp_server_over_stdio(client, tmp_path):
     client.post(f"/proposals/{p['id']}", json={"decision": "approve"})
     assert len(client.get("/api/transactions").json()) == tx_before + 1
     assert any(a["actor"] == "MCP · Claude Desktop" for a in client.get("/routines").json()["audit"])
+
+
+# ---------------------------------------------------------------- automatic MCP setup
+def _mcp_env(tmp_path, monkeypatch):
+    from aaryaai_finance import mcp_setup as ms
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setenv("AARYAAI_FAKE_HOME", str(tmp_path / "home"))
+    return ms
+
+
+def test_mcp_setup_merges_backs_up_and_detects(tmp_path, monkeypatch):
+    ms = _mcp_env(tmp_path, monkeypatch)
+    data = tmp_path / "data"
+    with pytest.raises(ValueError, match="installed"):
+        ms.install("claude", data, platform="linux")
+    cfg = tmp_path / "cfg" / "Claude" / "claude_desktop_config.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(json.dumps({"mcpServers": {"other": {"command": "x"}}, "theme": "dark"}))
+    assert next(s for s in ms.status(data, platform="linux") if s["id"] == "claude")["state"] == "not_connected"
+    r = ms.install("claude", data, python="/py", platform="linux")
+    d = json.loads(cfg.read_text())
+    assert d["theme"] == "dark" and d["mcpServers"]["other"] == {"command": "x"}
+    assert d["mcpServers"]["aaryaai-finance"] == {"command": "/py", "args": ["-m", "aaryaai_finance", "mcp", "--data-dir", str(data.resolve())]}
+    assert r["written"][0]["backup"] and json.loads(Path(r["written"][0]["backup"]).read_text())["mcpServers"] == {"other": {"command": "x"}}
+    assert next(s for s in ms.status(data, python="/py", platform="linux") if s["id"] == "claude")["state"] == "connected"
+    assert next(s for s in ms.status(tmp_path / "other", python="/py", platform="linux") if s["id"] == "claude")["state"] == "outdated"
+    ms.uninstall("claude", platform="linux")
+    assert "aaryaai-finance" not in json.loads(cfg.read_text())["mcpServers"]
+    backups = sorted(cfg.parent.glob("claude_desktop_config.json.bak-*"))
+    assert len(backups) == 2 and json.loads(backups[0].read_text())["mcpServers"] == {"other": {"command": "x"}}   # same second: both kept
+    assert next(s for s in ms.status(data, platform="linux") if s["id"] == "vscode")["state"] == "not_found"
+
+
+def test_mcp_setup_vscode_with_comments_and_broken_files(tmp_path, monkeypatch):
+    ms = _mcp_env(tmp_path, monkeypatch)
+    p = tmp_path / "cfg" / "Code" / "User" / "mcp.json"
+    p.parent.mkdir(parents=True)
+    original = '{\n  // my servers\n  "servers": {"gh": {"type": "http", "url": "https://x/y//z"},},\n  /* inputs */ "inputs": []\n}\n'
+    p.write_text(original)
+    r = ms.install("vscode", tmp_path / "data", python="/py", platform="linux")
+    d = json.loads(p.read_text())
+    assert d["servers"]["gh"]["url"] == "https://x/y//z" and d["servers"]["aaryaai-finance"]["type"] == "stdio"
+    assert r["written"][0]["comments_removed"] and Path(r["written"][0]["backup"]).read_text() == original
+    p.write_text("{ not json")
+    with pytest.raises(ValueError, match="not changed"):
+        ms.install("vscode", tmp_path / "data", platform="linux")
+    assert p.read_text() == "{ not json"
+    assert next(s for s in ms.status(tmp_path / "data", platform="linux") if s["id"] == "vscode")["state"] == "unreadable"
+
+
+def test_mcp_setup_windows_store_claude(tmp_path, monkeypatch):
+    ms = _mcp_env(tmp_path, monkeypatch)
+    (tmp_path / "roaming" / "Claude").mkdir(parents=True)
+    store = tmp_path / "local" / "Packages" / "Claude_pzs8sxrjxfjjc" / "LocalCache" / "Roaming" / "Claude"
+    store.mkdir(parents=True)
+    r = ms.install("claude", tmp_path / "data", python="C:\\py.exe", platform="win32")
+    assert len(r["written"]) == 2 and (store / "claude_desktop_config.json").exists()
+
+
+def test_mcp_connect_api_and_cli(client, tmp_path, capsys):
+    from aaryaai_finance.cli import main
+    (tmp_path / "appdata" / "Claude").mkdir(parents=True, exist_ok=True)
+    clients = {c["id"]: c for c in client.get("/mcp/clients").json()["clients"]}
+    assert clients["claude"]["installed"] and clients["claude"]["state"] == "not_connected"
+    r = client.post("/mcp/connect", json={"client": "claude"}).json()
+    assert r["written"] and next(c for c in r["clients"] if c["id"] == "claude")["state"] == "connected"
+    assert client.post("/mcp/connect", json={"client": "nope"}).status_code == 400
+    assert client.post("/mcp/connect", json={"client": "vscode"}).status_code == 400          # not installed: clear message
+    assert any(a["action"].startswith("Connected Claude Desktop") for a in client.get("/routines").json()["audit"])
+    assert client.post("/mcp/connect", json={"client": "claude", "remove": True}).json()["removed"]
+    with pytest.raises(SystemExit) as ex:
+        main(["mcp", "--setup", "all", "--status", "--data-dir", str(tmp_path / "data")])
+    assert ex.value.code == 0
+    out = capsys.readouterr().out
+    assert "Claude Desktop: connected in" in out and "connected" in out
+
+
+def test_wizard_can_connect_mcp_apps(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "appdata"))
+    (tmp_path / "appdata" / "Claude").mkdir(parents=True)
+    c = local_client(create_app(tmp_path / "boot"))
+    assert [x["id"] for x in c.get("/setup/options").json()["mcp_clients"]] == ["claude"]
+    r = c.post("/setup/apply", json={"data_dir": str(tmp_path / "data"), "countries": ["DE"], "mcp_clients": ["claude", "vscode"]}).json()
+    assert [m["ok"] for m in r["mcp"]] == [True, False]
+    cfg = json.loads((tmp_path / "appdata" / "Claude" / "claude_desktop_config.json").read_text())
+    assert cfg["mcpServers"]["aaryaai-finance"]["args"][-1] == str((tmp_path / "data").resolve())
+
+
+def test_web_scripts_parse():
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not installed")
+    web = Path(__file__).resolve().parents[1] / "aaryaai_finance" / "web"
+    for f in ("app.js", "planning.js"):
+        r = subprocess.run([node, "--check", str(web / f)], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+
+
+def test_settings_are_isolated():
+    from aaryaai_finance import mcp_setup as ms
+    import os
+    for client in ms.CLIENTS:
+        for plat in ("win32", "darwin", "linux"):
+            for p in ms.config_paths(client, plat):
+                assert "isolated-home" in str(p), p
+    assert "isolated-home" in os.environ["LOCALAPPDATA"]

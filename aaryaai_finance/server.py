@@ -170,7 +170,8 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         c = ctx()
         return {"packs": [pack_summary(p) for p in available_packs(c.settings).values()], "currencies": COMMON_CURRENCIES,
                 "providers": {k: {kk: vv for kk, vv in v.items()} for k, v in PROVIDERS.items()},
-                "default_data_dir": str(c.settings.data_dir if (c.settings.is_configured or state["explicit_dir"]) else default_data_dir())}
+                "default_data_dir": str(c.settings.data_dir if (c.settings.is_configured or state["explicit_dir"]) else default_data_dir()),
+                "mcp_clients": [{"id": x["id"], "label": x["label"]} for x in __import__("aaryaai_finance.mcp_setup", fromlist=["status"]).status(c.settings.data_dir) if x["installed"]]}
 
     @app.post("/setup/apply")
     def setup_apply(p: dict = Body(...)):
@@ -207,7 +208,19 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
             state["ctx"].refresh_fx()
         except Exception:  # noqa: BLE001
             pass
-        return {"ok": True, "data_dir": str(s.data_dir)}
+        mcp = []
+        if p.get("mcp_clients"):
+            from . import mcp_setup as ms
+            for cid in p["mcp_clients"]:
+                if cid not in ms.CLIENTS:
+                    continue
+                try:
+                    r = ms.install(cid, s.data_dir)
+                    mcp.append({"client": cid, "ok": True, "label": r["label"], "next": r["next"]})
+                    state["ctx"].audit("You", f"Connected {r['label']} (MCP) during setup", ", ".join(w["path"] for w in r["written"]))
+                except ValueError as e:
+                    mcp.append({"client": cid, "ok": False, "error": str(e)})
+        return {"ok": True, "data_dir": str(s.data_dir), "mcp": mcp}
 
     @app.get("/config")
     def get_config():
@@ -539,7 +552,7 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
                 "ai": {"provider": prov_cfg.get("provider"), "ready": make_provider(prov_cfg, c.settings.secret) is not None,
                        "label": PROVIDERS.get(prov_cfg.get("provider"), {}).get("label"), "model": prov_cfg.get("model", "")},
                 "ai_summary": c.db.settings().get("routines:ai_summary", "1") != "0",
-                "mcp": {"config": config_snippet(c.settings.data_dir), "last": mcp_last}}
+                "mcp": {"config": config_snippet(c.settings.data_dir), "last": mcp_last, "clients": __import__("aaryaai_finance.mcp_setup", fromlist=["status"]).status(c.settings.data_dir)}}
 
     @app.post("/routines/run")
     def routines_run(p: dict = Body(...)):
@@ -559,6 +572,24 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         if "ai_summary" in p:
             c.db.set_setting("routines:ai_summary", "1" if p["ai_summary"] else "0")
         return routines_list()
+
+    @app.get("/mcp/clients")
+    def mcp_clients():
+        from . import mcp_setup as ms
+        return {"clients": ms.status(ctx().settings.data_dir)}
+
+    @app.post("/mcp/connect")
+    def mcp_connect(p: dict = Body(...)):
+        from . import mcp_setup as ms
+        c = ctx()
+        need(p.get("client") in ms.CLIENTS, "Unknown app")
+        try:
+            r = ms.uninstall(p["client"]) if p.get("remove") else ms.install(p["client"], c.settings.data_dir)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        c.audit("You", f"{'Disconnected' if p.get('remove') else 'Connected'} {r['label']} (MCP)",
+                ", ".join(x["path"] for x in r.get("written", r.get("removed", []))))
+        return {**r, "clients": ms.status(c.settings.data_dir)}
 
     @app.post("/proposals/{pid}")
     def decide(pid: int, p: dict = Body(...)):

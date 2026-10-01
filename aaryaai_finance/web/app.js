@@ -54,7 +54,7 @@ const countryName = (code) => packFor(code)?.name || code || "Other";
 const ccyCountry = (c) => CFG.packs.find((p) => p.currency === c);
 const pct = (v, d = 1) => (v * 100).toFixed(d) + "%";
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const toast = (m) => { const t = $("#toast"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2600); };
+const toast = (m) => { const t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.tm); toast.tm = setTimeout(() => t.classList.remove("show"), Math.max(2600, String(m).length * 55)); };
 const kpi = (l, v, s = "", extra = "") => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div>${extra}</div>`;
 const meter = (f, color) => `<div class="meter"><i style="width:${Math.max(0, Math.min(1, f)) * 100}%;${color ? "background:" + color : ""}"></i></div>`;
 const daysTo = (d) => Math.ceil((new Date(d) - new Date(new Date().toDateString())) / 864e5);
@@ -297,7 +297,9 @@ function drawWizard() {
     const pv = o.providers;
     b.innerHTML = `<h2>AI assistant <span class="hint" style="font-size:15px">optional</span></h2><p class="lead">Everything works without AI — sorting and deadlines use rules. Connect one to chat about your finances in plain English. Only your question and the numbers it needs are sent.</p>
       <div class="provpick">${Object.entries(pv).map(([k, v]) => `<label><input type="radio" name="prov" value="${k}" ${d.ai.provider === k ? "checked" : ""}>${esc(v.label)}</label>`).join("")}</div>
-      <div id="wAI" class="form"></div>`;
+      <div id="wAI" class="form"></div>
+      ${(o.mcp_clients || []).length ? `<div class="form" style="margin-top:14px"><p class="lead" style="margin:0">Also use your numbers in an AI app you already have? It adds aaryaai-finance to its MCP settings (a backup is kept); the app can then read your numbers and suggest changes for you to approve.</p>
+        ${o.mcp_clients.map((c) => `<label class="chk"><input type="checkbox" data-mcp="${c.id}" ${(d.mcp_clients || []).includes(c.id) ? "checked" : ""}> Connect ${esc(c.label)}</label>`).join("")}</div>` : ""}`;
     const drawAI = () => {
       const k = $("input[name=prov]:checked")?.value || "none", v = pv[k];
       d.ai.provider = k;
@@ -327,6 +329,7 @@ function collectWizard() {
     if ($("#wEp")) d.ai.endpoint = $("#wEp").value.trim();
     if ($("#wDep")) d.ai.deployment = $("#wDep").value.trim();
     if ($("#wModel")) d.ai.model = $("#wModel").value;
+    d.mcp_clients = $$("[data-mcp]:checked").map((x) => x.dataset.mcp);
     const key = $("#wKey")?.value.trim();
     if (key) d.secrets[{ anthropic: "anthropic_api_key", azure_openai: "azure_openai_api_key", github_models: "github_token" }[k]] = key;
   }
@@ -336,8 +339,11 @@ $("#wizNext").onclick = async () => {
   if (WIZ.step < 3) { WIZ.step++; drawWizard(); return; }
   $("#wizNext").disabled = true; $("#wizErr").textContent = "";
   try {
-    await api("/setup/apply", { method: "POST", body: WIZ.data });
-    $("#wizard").hidden = true; toast("You're all set"); await loadConfig();
+    const res = await api("/setup/apply", { method: "POST", body: WIZ.data });
+    const ok = (res.mcp || []).filter((m) => m.ok), bad = (res.mcp || []).filter((m) => !m.ok);
+    $("#wizard").hidden = true;
+    toast(ok.length ? `You're all set. ${ok.map((m) => m.label).join(" and ")} connected: restart ${ok.length > 1 ? "them" : "it"} to see aaryaai-finance.` : bad.length ? `You're all set. MCP: ${bad[0].error}` : "You're all set");
+    await loadConfig();
     go(location.hash.slice(1) || "home");
   } catch (e) { $("#wizErr").textContent = e.message; }
   $("#wizNext").disabled = false;

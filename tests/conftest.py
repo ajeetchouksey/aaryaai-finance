@@ -18,3 +18,13 @@ import pytest  # noqa: E402
 def _no_real_keychain(monkeypatch):
     """Tests never touch the machine's real keychain (the keychain test uses an in-memory stand-in)."""
     monkeypatch.setenv("AARYAAI_NO_KEYRING", "1")
+
+
+@pytest.fixture(autouse=True)
+def _no_real_app_settings(monkeypatch, tmp_path_factory):
+    """Tests never read or write the real settings of Claude Desktop, VS Code or this app.
+    Every place mcp_setup and config look for them points into a throw-away folder (tests may override it)."""
+    root = tmp_path_factory.mktemp("isolated-home")
+    for var, sub in (("APPDATA", "roaming"), ("LOCALAPPDATA", "local"), ("XDG_CONFIG_HOME", "config"), ("AARYAAI_FAKE_HOME", "home")):
+        monkeypatch.setenv(var, str(root / sub))
+

@@ -65,7 +65,7 @@ The first time the app opens, it asks four things. You can change all of them la
 
 **3. Your documents folder.** Point it at the folder where you already keep payslips, statements and tax papers. The app files new documents into the same structure, and never deletes or moves anything without your click. Folder names per country can be set too, for example `Finance/germany` and `Finance/india`.
 
-**4. AI (optional).** Choose **No AI** for now if you like; every screen works without it. See [part 7](#ai-assistant).
+**4. AI (optional).** Choose **No AI** for now if you like; every screen works without it. See [part 7](#ai-assistant). If Claude Desktop or VS Code is installed, you can also tick it here to connect it through MCP.
 
 When you finish, the **Home** screen opens. It will be mostly empty until you add accounts.
 
@@ -262,7 +262,13 @@ Step-by-step instructions: [Connecting AI](ai-providers.md). With AI connected y
 
 ### Claude Desktop, VS Code and other MCP apps
 
-Go to **Routines → Connections → Connect an MCP app**, copy the snippet, and paste it into Claude Desktop's or VS Code's MCP settings. Your assistant can then read your forecast, goals and tax status, and suggest entries for you to approve. Details: [MCP](mcp.md).
+If Claude Desktop or VS Code (GitHub Copilot) is installed, the app connects to it for you:
+
+- **during first setup**, tick *Connect Claude Desktop* / *Connect VS Code* on the last step, or
+- **later**, open **Routines → Connections** and click **Connect**, or
+- run `aaryaai-finance mcp --setup all`.
+
+It adds one entry to that app's MCP settings and keeps a backup. Then restart Claude Desktop, or start the server in VS Code's MCP list and use Copilot Chat in Agent mode. Your assistant can read your forecast, goals and tax status and suggest entries for you to approve. Details and manual setup: [MCP](mcp.md).
 
 ### Your own rules, fields and countries
 

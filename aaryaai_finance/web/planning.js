@@ -430,13 +430,29 @@ function drawRoutines(r) {
     rowItem("In-app assistant", r.ai.ready ? `${esc(r.ai.label || r.ai.provider)}${r.ai.model ? " · " + esc(r.ai.model) : ""}` : "not connected", "", chip(r.ai.ready ? (r.ai.provider === "ollama" ? "On this computer" : "Connected") : "Off", r.ai.ready ? "good" : "muted")) +
     rowItem("Claude Desktop, VS Code (Copilot) and other MCP apps", r.mcp.last ? `last used by ${esc(r.mcp.last.actor.replace("MCP · ", ""))} · ${esc(r.mcp.last.ts.replace("T", " ").slice(0, 16))}` : "local MCP server over stdio — no network port", "", chip(r.mcp.last ? "Used" : "Ready", r.mcp.last ? "good" : "muted")) +
     rowItem("No AI", "every routine, rule, calculator and screen works without it", "", chip("Always", "muted")) +
-    `<details style="margin-top:10px"><summary>Connect an MCP app</summary><p class="li-s">Add this to Claude Desktop's <code>claude_desktop_config.json</code> (or under <code>servers</code> in VS Code's <code>mcp.json</code>), then restart the app. It can read your numbers and <b>propose</b> changes; proposals wait here for your OK.</p>
+    `<div class="lbl" style="margin:14px 0 2px">Connect an MCP app on this computer</div>` +
+    (r.mcp.clients || []).map((c) => {
+      const st = { connected: ["Connected", "good"], outdated: ["Needs update", "warn"], not_connected: ["Not connected", "muted"], not_found: ["Not installed", "muted"], unreadable: ["Can't read its settings", "bad"] }[c.state];
+      const btn = !c.installed ? "" : c.state === "connected"
+        ? `<button class="sm ghost" onclick="mcpConnect('${c.id}', true)">Disconnect</button>`
+        : c.state === "unreadable" ? "" : `<button class="sm" onclick="mcpConnect('${c.id}')">${c.state === "outdated" ? "Update" : "Connect"}</button>`;
+      return rowItem(esc(c.label), c.problem ? esc(c.problem) : c.installed ? esc(c.paths.join(" · ")) : "install it and open it once to connect here", btn, chip(st[0], st[1]));
+    }).join("") +
+    `<p class="li-s">Connect adds one entry to the app's MCP settings and keeps a backup of the file. Other entries are left as they are.</p>` +
+    `<details style="margin-top:10px"><summary>Set it up by hand instead</summary><p class="li-s">Add this to Claude Desktop's <code>claude_desktop_config.json</code> (or under <code>servers</code> in VS Code's <code>mcp.json</code>), then restart the app. It can read your numbers and <b>propose</b> changes; proposals wait here for your OK.</p>
       <pre class="code">${esc(snip)}</pre><button class="sm ghost" onclick="navigator.clipboard.writeText(${esc(JSON.stringify(snip))}).then(()=>toast('Copied'))">Copy</button></details>`;
   $("#rtAudit").innerHTML = hdr("Audit log", "who did what") + `<div class="tablewrap"><table class="rt"><thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead><tbody>` +
     r.audit.slice(0, 25).map((a) => `<tr><td class="li-s">${esc(a.ts.replace("T", " ").slice(5, 16))}</td><td data-l="Who">${chip(esc(a.actor), a.actor.startsWith("MCP") || a.actor.startsWith("AI") ? "lilac" : a.actor === "Routine" ? "muted" : "eur")}</td>
       <td data-l="What">${esc(hideAmt(a.action))}${a.detail ? `<div class="li-s">${esc(hideAmt(a.detail)).slice(0, 160)}</div>` : ""}</td></tr>`).join("") + `</tbody></table></div>`;
   const b = $("#navProposals"); if (b) { b.hidden = !pend.length; b.textContent = pend.length; }
 }
+window.mcpConnect = async (client, remove) => {
+  try {
+    const r = await api("/mcp/connect", { method: "POST", body: { client, remove: !!remove } });
+    toast(remove ? `${r.label}: disconnected` : `${r.label} connected. ${r.next}`);
+    loaders.routines();
+  } catch (e) { toast(e.message); }
+};
 window.runRoutines = async (id) => {
   toast("Running…");
   try { const r = await api("/routines/run", { method: "POST", body: { id } }); drawRoutines(r); toast(r.ran.length ? `Ran ${r.ran.length} routine${r.ran.length > 1 ? "s" : ""}` : "Nothing was due"); }

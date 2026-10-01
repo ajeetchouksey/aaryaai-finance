@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.1 — 2026-10-01
+
+### One-click MCP setup
+- The app connects itself to **Claude Desktop** and **VS Code (GitHub Copilot)**: a **Connect** button per app in Routines → Connections, a checkbox in the setup wizard, or `aaryaai-finance mcp --setup all` (`--status`, `--remove`).
+- It adds one entry to the app's MCP settings, leaves other entries alone and keeps a backup of the file. Unreadable files are never changed; VS Code files with comments are handled.
+- New **Setup guide** in the docs.
+
+
 ## 0.5.0 — 2026-09-30
 
 A new look and a set of planning tools. Everything works without AI; AI only adds optional extras.
