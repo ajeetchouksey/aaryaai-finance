@@ -216,8 +216,10 @@ def test_diversify_xray_and_target_validation(page):
     page.fill("#tgtForm input[name=shares]", "95")
     page.click("#tgtForm button")
     page.wait_for_function("document.querySelector('#toast').textContent.includes('more than 100%')")
-    go(page, "diversify", "#dvXray .xr")
-    assert page.locator("#tgtForm input[name=shares]").input_value() == "40"   # nothing was saved
+    page.reload()                                                              # nothing was saved: a fresh load shows 40
+    page.wait_for_function("typeof go === 'function'")
+    go(page, "diversify", "#tgtForm input[name=shares]")
+    page.wait_for_function("document.querySelector('#tgtForm input[name=shares]').value === '40'")
 
 
 # ---------------------------------------------------------------- Opportunities
