@@ -21,6 +21,8 @@
 
 ## Quick start
 
+Step-by-step, from install to your own numbers: **[Setup guide](docs/setup-guide.md)**.
+
 You need **Python 3.10+**.
 
 ```bash

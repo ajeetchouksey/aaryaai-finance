@@ -1,5 +1,7 @@
 # Getting started
 
+This is the five-minute version. For every step in detail, see the [Setup guide](setup-guide.md).
+
 This takes about five minutes. You need a computer with Windows, macOS or Linux and [Python 3.10 or newer](https://www.python.org/downloads/). On Windows, tick "Add Python to PATH" when installing it.
 
 ## 1. Install
@@ -24,14 +26,15 @@ Your browser opens at `http://127.0.0.1:8770`. The app only runs while that wind
 
 ## 3. Add what you have
 
-- **Position → Add account or debt:** your bank accounts with today's balance, then property, pensions, loans and anything else you own or owe.
+- **Money → ＋ Add … account:** your bank accounts with today's balance; tick “Cash I can reach within a week” for money you can use.
+- **Net worth → Add account or debt:** property, pensions, loans and anything else you own or owe.
 - **Money → Add an entry:** your salary and rent, set to repeat monthly. They'll be logged for you each month.
 - **Goals:** what you're saving for and by when. The app works out what that costs after inflation and what to put aside each month.
 - **Documents:** drop a few files. Check where the app suggests filing them, then click to move them.
 
-## 4. Check the Tax tab
+## 4. Check Deadlines and Home
 
-Deadlines come from your country packs and your answers in step 2. Tick them off as you go. The calculators give quick estimates, such as a German refund or India's old vs new regime. They're estimates only, so confirm filings with a tax adviser.
+Deadlines come from your country packs and your answers in step 2. They're on the **Deadlines** screen; tick them off as you go. **Home** then shows what's coming up, your cash forecast warnings and goal odds. The calculators give quick estimates, such as a German refund or India's old vs new regime. They're estimates only, so confirm filings with a tax adviser.
 
 ## Everyday tips
 

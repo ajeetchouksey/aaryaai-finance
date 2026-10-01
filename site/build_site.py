@@ -35,6 +35,7 @@ PAGES = "https://ajeetchouksey.github.io/aaryaai-finance"
 DOCS = [  # (source, output, title)
     ("README.md", "overview.html", "Overview"),
     ("docs/getting-started.md", "getting-started.html", "Getting started"),
+    ("docs/setup-guide.md", "setup-guide.html", "Setup guide"),
     ("docs/planning.md", "planning.html", "Planning tools"),
     ("docs/mcp.md", "mcp.html", "MCP: Claude Desktop & VS Code"),
     ("CONTRIBUTING.md", "rules-and-packs.html", "Rules, packs & data model"),
