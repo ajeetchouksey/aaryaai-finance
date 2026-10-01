@@ -331,7 +331,8 @@ def test_mcp_setup_windows_store_claude(tmp_path, monkeypatch):
 
 def test_mcp_connect_api_and_cli(client, tmp_path, capsys):
     from aaryaai_finance.cli import main
-    (tmp_path / "appdata" / "Claude").mkdir(parents=True, exist_ok=True)
+    from aaryaai_finance import mcp_setup as ms
+    ms.config_paths("claude")[0].parent.mkdir(parents=True, exist_ok=True)      # "install" Claude Desktop on this OS
     clients = {c["id"]: c for c in client.get("/mcp/clients").json()["clients"]}
     assert clients["claude"]["installed"] and clients["claude"]["state"] == "not_connected"
     r = client.post("/mcp/connect", json={"client": "claude"}).json()
@@ -350,12 +351,14 @@ def test_mcp_connect_api_and_cli(client, tmp_path, capsys):
 def test_wizard_can_connect_mcp_apps(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "appdata"))
-    (tmp_path / "appdata" / "Claude").mkdir(parents=True)
+    from aaryaai_finance import mcp_setup as ms
+    cfg_path = ms.config_paths("claude")[0]
+    cfg_path.parent.mkdir(parents=True)
     c = local_client(create_app(tmp_path / "boot"))
     assert [x["id"] for x in c.get("/setup/options").json()["mcp_clients"]] == ["claude"]
     r = c.post("/setup/apply", json={"data_dir": str(tmp_path / "data"), "countries": ["DE"], "mcp_clients": ["claude", "vscode"]}).json()
     assert [m["ok"] for m in r["mcp"]] == [True, False]
-    cfg = json.loads((tmp_path / "appdata" / "Claude" / "claude_desktop_config.json").read_text())
+    cfg = json.loads(cfg_path.read_text())
     assert cfg["mcpServers"]["aaryaai-finance"]["args"][-1] == str((tmp_path / "data").resolve())
 
 
