@@ -28,3 +28,12 @@ def _no_real_app_settings(monkeypatch, tmp_path_factory):
     for var, sub in (("APPDATA", "roaming"), ("LOCALAPPDATA", "local"), ("XDG_CONFIG_HOME", "config"), ("AARYAAI_FAKE_HOME", "home")):
         monkeypatch.setenv(var, str(root / sub))
 
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Lets UI tests take a screenshot when they fail (see tests/test_ui_e2e.py)."""
+    outcome = yield
+    rep = outcome.get_result()
+    if rep.when == "call":
+        item.rep_call = rep

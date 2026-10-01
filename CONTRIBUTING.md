@@ -136,3 +136,24 @@ tax_workspace:                      # the Tax return screen
 ```
 
 Formulas are evaluated by a small safe evaluator: numbers, names of answers and derived values, `+ - * /`, comparisons, `and`/`or`/`not`, `a if cond else b`, and `min`, `max`, `round`, `abs`. Unanswered names count as 0. Anything else (attributes, strings, other calls) is refused when the pack loads, and the workspace is skipped with an error in Settings.
+
+
+## Tests
+
+```bash
+pip install -e ".[dev]"
+pytest                      # unit and API tests; UI tests are skipped without Playwright
+```
+
+**UI tests** start the real app on the invented sample data (`site/demo_data.py`) and drive it in Chromium: every screen loads without JavaScript errors or sideways scrolling (desktop and phone width), and the main flows work end to end — forecast scenarios and floors, planned items, the goal slider, target validation, opportunities, tax answers and CSV export, approving a proposal, running a routine, connecting Claude Desktop (in an isolated folder), hiding amounts, the API refusing requests without the page's token, and the setup wizard on an empty folder.
+
+```bash
+pip install -e ".[dev,ui]"
+python -m playwright install chromium
+pytest -m ui
+```
+
+A failing UI test saves a full-page screenshot in `ui-artifacts/`. CI runs them in a separate job and uploads those screenshots.
+Tests never touch your real settings: `tests/conftest.py` points every settings location (app, Claude Desktop, VS Code) into a temporary folder.
+
+The manual acceptance test (UAT) guide covers the same ground plus what a browser test can't: Claude Desktop answering, VS Code, AI providers.

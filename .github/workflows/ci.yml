@@ -27,3 +27,23 @@ jobs:
       - run: pytest -q
       - name: CLI smoke test
         run: aaryaai-finance --version
+
+  ui:
+    name: UI tests (Chromium)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip setuptools
+      - run: pip install -e ".[dev,ui]"
+      - run: python -m playwright install --with-deps chromium
+      - run: pytest -m ui -v
+      - name: Screenshots of failing UI tests
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-artifacts
+          path: ui-artifacts/
+          if-no-files-found: ignore
