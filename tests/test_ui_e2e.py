@@ -531,3 +531,30 @@ def test_setup_wizard_on_an_empty_folder(browser, tmp_path):
         assert not errors, errors
     finally:
         server.should_exit = True
+
+
+# ---------------------------------------------------------------- light and dark theme
+def test_theme_follows_the_computer_and_can_be_chosen(browser, app):
+    def open_(scheme):
+        ctx = browser.new_context(viewport={"width": 1280, "height": 900}, color_scheme=scheme, bypass_csp=True)
+        pg = ctx.new_page()
+        pg.goto(app["url"] + "/"); pg.wait_for_function("document.querySelector('#homeKpis .kpi')")
+        return ctx, pg
+    theme = "document.documentElement.dataset.theme"
+    paper = "getComputedStyle(document.documentElement).getPropertyValue('--paper').trim()"
+    ctx, pg = open_("dark")
+    assert pg.evaluate(theme) == "dark" and pg.evaluate(paper) == "#0e1a2d"
+    ctx.close()
+    ctx, pg = open_("light")
+    assert pg.evaluate(theme) == "light" and pg.evaluate(paper) == "#f4f6fb"           # "System" is the default
+    go(pg, "settings", "#themeSeg")
+    assert pg.get_attribute("#themeSeg [data-theme-mode=system]", "aria-pressed") == "true"
+    pg.click("#themeSeg [data-theme-mode=dark]")
+    assert pg.evaluate(theme) == "dark" and pg.get_attribute("#themeSeg [data-theme-mode=dark]", "aria-pressed") == "true"
+    assert pg.get_attribute('meta[name="theme-color"]', "content") == "#0e1a2d"
+    pg.reload(); pg.wait_for_load_state("load")
+    assert pg.evaluate(theme) == "dark"                                                 # remembered in this browser
+    go(pg, "settings", "#themeSeg")
+    pg.click("#themeSeg [data-theme-mode=system]")
+    assert pg.evaluate(theme) == "light"
+    ctx.close()
