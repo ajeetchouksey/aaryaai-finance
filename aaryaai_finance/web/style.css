@@ -650,6 +650,8 @@ nav#tabs button .navcount{margin-left:auto;background:var(--gold);color:#1a1300;
 .prop{display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--pline)}
 .prop-t{flex:1;min-width:0;display:grid;gap:4px}.prop-a{display:flex;gap:6px;flex:none}
 .prop.decided{opacity:.7}
+.aiprop{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-left:3px solid var(--lilac);border-radius:10px;background:var(--card2)}
+.aiprop-t{flex:1;min-width:200px;display:grid;gap:2px;color:var(--ink)}.aiprop-a{display:flex;gap:6px;flex:none}
 .stagestrip{display:grid;gap:4px;margin:4px 0 14px}
 .stagestrip i{font:600 12px var(--num);font-style:normal;height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center;background:rgba(169,155,255,.1);color:var(--muted)}
 .stagestrip i.paid{background:var(--lilac);color:#0e1a2d}.stagestrip i.next{background:var(--gold);color:#1a1300}
