@@ -114,6 +114,7 @@ def forecast_refresh(ctx) -> dict:
     for p in ctx.db.list("proposals"):
         if p["status"] == "pending" and p["key"].startswith("transfer:") and p["key"] not in keys:
             ctx.db.upsert("proposals", {"id": p["id"], "status": "skipped", "decided": datetime.now().isoformat(timespec="seconds")})
+            ctx.audit("Forecast refresh", "Skipped (no longer needed): " + p["title"])
     lows = ", ".join(f"{c} lowest {v['low']:,.0f} in {v['month']}" for c, v in f["lowest"].items())
     return {"text": f"12 months ahead: {lows}. {len(f['plan'])} transfer(s) in the funding plan"
                     + (f"; {len(f['watch'])} currency still dips below its floor." if f["watch"] else "."),
