@@ -99,7 +99,7 @@ deadlines:
     source: § 149 AO
 ```
 
-`{year}` is the calendar year; `{tax_year}` the year the filing is about. The app generates every occurrence in the next ~15 months; ticking one off is stored in the database under a stable key, so edits to wording don't lose your ticks.
+`{year}` is the calendar year; `{tax_year}` the year the filing is about. A pack can set `due_roll: next_weekday` at the top level to move its deadlines that fall on a Saturday or Sunday to the next Monday (Germany does, per § 108 Abs. 3 AO); ticks stay attached to the rule's own date. The app generates every occurrence in the next ~15 months; ticking one off is stored in the database under a stable key, so edits to wording don't lose your ticks.
 
 ## The data model (`model.json`)
 

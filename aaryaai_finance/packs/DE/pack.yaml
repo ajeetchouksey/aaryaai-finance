@@ -23,6 +23,13 @@ questions:
   - id: de_church
     label: "Do you pay church tax (Kirchensteuer)?"
     type: bool
+  - id: de_prepayments
+    label: "Has the Finanzamt set quarterly income-tax prepayments (Vorauszahlungen) for you?"
+    type: bool
+
+# German deadlines that fall on a Saturday or Sunday move to the next Monday (§ 108 Abs. 3 AO).
+# Regional public holidays aren't included: check those yourself.
+due_roll: next_weekday
 
 ai_notes: |
   Germany: residents are taxed on WORLDWIDE income. Employees' tax is withheld (Lohnsteuer); a return
@@ -43,6 +50,8 @@ calculators:
         2025: [12096, 17443, 932.30, 68480, 176.64, 1015.13, 10911.92, 277825, 19246.67]
         2026: [12348, 17799, 914.51, 69878, 173.10, 1034.87, 11135.63, 277825, 19470.38]
       soli_freigrenze: {2023: 17543, 2024: 18130, 2025: 19950, 2026: 20350}
+      soli_rate: 0.055        # § 4 SolZG
+      soli_zone_rate: 0.119   # Milderungszone: at most 11.9% of the tax above the threshold
     inputs:
       - {id: year, label: Tax year, type: select, options: [2025, 2024, 2023, 2026], default: 2025}
       - {id: gross, label: Gross salary (Lohnsteuerbescheinigung line 3), type: number}
@@ -65,6 +74,34 @@ calculators:
       - {id: church, label: Church tax, type: bool, from_answer: de_church}
 
 deadlines:
+  - id: de_prepay_q1
+    title: "Income-tax prepayment (Vorauszahlung) for Q1 {year}"
+    due: "{year}-03-10"
+    if: de_prepayments
+    severity: normal
+    detail: "Pay the amount on your latest Vorauszahlungsbescheid. Late payment costs a surcharge of 1% per started month (§ 240 AO)."
+    source: "§ 37 Abs. 1 EStG"
+  - id: de_prepay_q2
+    title: "Income-tax prepayment (Vorauszahlung) for Q2 {year}"
+    due: "{year}-06-10"
+    if: de_prepayments
+    severity: normal
+    detail: "Pay the amount on your latest Vorauszahlungsbescheid."
+    source: "§ 37 Abs. 1 EStG"
+  - id: de_prepay_q3
+    title: "Income-tax prepayment (Vorauszahlung) for Q3 {year}"
+    due: "{year}-09-10"
+    if: de_prepayments
+    severity: normal
+    detail: "Pay the amount on your latest Vorauszahlungsbescheid."
+    source: "§ 37 Abs. 1 EStG"
+  - id: de_prepay_q4
+    title: "Income-tax prepayment (Vorauszahlung) for Q4 {year}"
+    due: "{year}-12-10"
+    if: de_prepayments
+    severity: normal
+    detail: "Pay the amount on your latest Vorauszahlungsbescheid. If your income dropped, you can ask the Finanzamt to lower future prepayments."
+    source: "§ 37 Abs. 1 EStG"
   - id: de_return_mandatory
     title: "German tax return {tax_year} — due (no advisor)"
     due: "{tax_year+1}-07-31"

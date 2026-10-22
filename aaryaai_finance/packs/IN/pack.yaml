@@ -23,6 +23,9 @@ questions:
   - id: in_advance_tax
     label: "Will your Indian tax after TDS be more than ₹10,000 this year (advance tax applies)?"
     type: bool
+  - id: in_salary
+    label: "Do you get a salary from an employer in India?"
+    type: bool
 
 ai_notes: |
   India: a non-resident (NRI) is taxed only on Indian-source income (NRO/FD interest, rent, Indian capital gains).
@@ -42,6 +45,7 @@ calculators:
       cess: 0.04
       caps: {c80: 150000, d80: 25000, home_loan_interest: 200000}
       capital_gains: {stcg_equity: 0.20, ltcg_equity: 0.125, ltcg_exempt: 125000}
+      fy_label: "2025-26"   # the financial year these slabs, rebates and rates are for (Finance Act 2025)
     inputs:
       - {id: resident, label: "Resident in India this year (not NRI)", type: bool, from_answer: "!in_nri"}
       - {id: salary, label: Indian salary, type: number}
@@ -73,6 +77,27 @@ deadlines:
     severity: high
     detail: "Late fee ₹1,000–₹5,000. After this, only an 'updated return' (ITR-U) within 48 months, with extra tax."
     source: "Income-tax Department due dates"
+  - id: in_advance_tax_q1
+    title: "Advance tax — first instalment (15%)"
+    due: "{year}-06-15"
+    if: in_advance_tax
+    severity: normal
+    detail: "Due only if tax after TDS exceeds ₹10,000. Pay at least 15% of the year's estimated tax. Instalments: 15 Jun (15%), 15 Sep (45%), 15 Dec (75%), 15 Mar (100%)."
+    source: "Section 211 / Income-tax Act 2025"
+  - id: in_advance_tax_q2
+    title: "Advance tax — 45% instalment"
+    due: "{year}-09-15"
+    if: in_advance_tax
+    severity: normal
+    detail: "By now at least 45% of the year's estimated tax should be paid. Short payment costs interest under s.234C."
+    source: "Section 211 / Income-tax Act 2025"
+  - id: in_form16
+    title: "Get Form 16 from your employer for FY {tax_year}-{tax_year_next2}"
+    due: "{tax_year+1}-06-15"
+    if: in_salary
+    severity: normal
+    detail: "Employers must issue Form 16 (the TDS certificate for salary) by 15 June. You need it to file the return and to check the TDS in Form 26AS / AIS."
+    source: "Rule 31 Income-tax Rules"
   - id: in_advance_tax_q3
     title: "Advance tax — 75% instalment"
     due: "{year}-12-15"
