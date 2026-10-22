@@ -373,13 +373,44 @@ def validate_rules_yaml(text: str) -> list[str]:
     for i, r in enumerate(d.get("deadlines", []) or []):
         if not isinstance(r, dict) or not r.get("id") or not r.get("title") or not r.get("due"):
             errs.append(f"deadlines[{i}] needs id, title and due")
+    from ..core.importer import check_profile
+    for p in d.get("import_profiles", []) or []:
+        errs += check_profile(p)
     return errs
+
+
+def load_import_profiles(folder: Path, packs: dict) -> tuple[list, list]:
+    """Bank-statement profiles: yours first (same id replaces a pack's), then each switched-on pack's."""
+    from ..core.importer import check_profile
+    found, errs = [], []
+    if folder and folder.exists():
+        for p in sorted(folder.glob("*.y*ml")):
+            try:
+                d = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+            except Exception:  # noqa: BLE001 — already reported by load_yaml_rules
+                continue
+            found += [{**r, "_source": f"yours · {p.name}"} for r in (d.get("import_profiles") or []) if isinstance(r, dict)]
+    for code, pk in packs.items():
+        found += [{**r, "country": r.get("country", code), "_source": f"{pk.get('flag', '')} {pk.get('name', code)} pack"}
+                  for r in (pk.get("import_profiles") or []) if isinstance(r, dict)]
+    seen, out = set(), []
+    for r in found:
+        bad = check_profile(r)
+        if bad:
+            errs += [f"{r.get('_source', '')}: {e}" for e in bad]
+        elif r["id"] not in seen:
+            seen.add(r["id"])
+            out.append(r)
+    from ..core.importer import GENERIC
+    return out + [g for g in GENERIC if g["id"] not in seen], errs
 
 
 class RuleSet:
     def __init__(self, settings, packs: dict, trackers: list[dict]):
         self.settings, self.packs, self.trackers = settings, packs, trackers
         user_docs, user_dls, self.errors = load_yaml_rules(settings.rules_dir)
+        self.import_profiles, perrs = load_import_profiles(settings.rules_dir, packs)
+        self.errors += perrs
         tracker_docs = []
         for t in trackers:
             for r in t.get("document_rules", []) or []:

@@ -401,6 +401,25 @@ def test_chat_suggestion_waits_for_approval(page, monkeypatch):
     assert len(page.evaluate("api('/api/transactions')")) == before + 1
 
 
+# ---------------------------------------------------------------- Money: import a bank statement
+def test_import_a_statement_with_preview(page, tmp_path):
+    csv = tmp_path / "statement.csv"
+    csv.write_text("Buchungstag;Verwendungszweck;Beguenstigter/Zahlungspflichtiger;Betrag\n"
+                   "02.10.2026;Einkauf;UI test bakery;-7,40\n03.10.2026;Erstattung;UI test refund;12,00\n", encoding="utf-8")
+    go(page, "money", "#impForm")
+    page.wait_for_function("document.querySelectorAll('#impForm select option[value]:not([value=\"\"])').length > 0")
+    before = len(page.evaluate("api('/api/transactions')"))
+    page.set_input_files("#impFile", str(csv))
+    dlg = page.locator("#impDlg")
+    dlg.wait_for(state="visible")
+    assert "2 new" in dlg.inner_text() and "UI test bakery" in dlg.inner_text()
+    dlg.locator("tbody input[type=checkbox]").nth(1).uncheck()               # keep only the bakery
+    dlg.locator("#impGo:has-text('Import 1 entry')").click()
+    dlg.wait_for(state="hidden")
+    after = page.evaluate("api('/api/transactions')")
+    assert len(after) == before + 1 and any((t["note"] or "").startswith("UI test bakery") for t in after)
+
+
 # ---------------------------------------------------------------- first-time setup
 def test_setup_wizard_on_an_empty_folder(browser, tmp_path):
     fresh = tmp_path / "fresh"

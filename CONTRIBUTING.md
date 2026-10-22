@@ -50,6 +50,26 @@ document_rules:
 
 Paths can't escape the documents folder, and existing files are never overwritten — a number is added instead.
 
+## Bank-statement import profiles
+
+**Money → Import a bank statement** reads your bank's CSV export with a profile. Profiles come from your rules files (`<data folder>/rules/*.yaml`) first, then the switched-on country packs, then a built-in generic one. The first profile whose `headers_all` names all appear in one row of the file is used, so lines of account details above the table are fine.
+
+```yaml
+import_profiles:
+  - id: my_bank                         # unique; reuse a pack id to replace that profile
+    label: My bank's CSV
+    match: {headers_all: [Buchungstag, Betrag]}      # header names that identify the file (case doesn't matter)
+    columns:
+      date: Buchungstag
+      amount: Betrag                    # negative = money out. Or use debit: … and credit: … instead
+      description: [Beguenstigter/Zahlungspflichtiger, Verwendungszweck]   # joined with " · "
+    date_format: ["%d.%m.%Y", "%d.%m.%y"]   # Python strftime codes; the first that fits is used
+    delimiter: ";"                      # optional; detected when left out
+    invert: false                       # optional; true for card statements where spending is positive
+```
+
+Amounts are read the German (`1.234,56`), English (`1,234.56`) and Indian (`1,20,000`) way; `12,50-` and `(12.50)` count as negative. You see every row before anything is saved, rows already in the account (same date, type and amount) start unticked, and the import is all-or-nothing.
+
 ## Deadline rules
 
 ```yaml

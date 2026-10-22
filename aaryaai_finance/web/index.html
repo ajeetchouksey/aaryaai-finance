@@ -216,6 +216,10 @@
           <label>Note <input name="note" placeholder="e.g. REWE, school fees, SIP"></label>
           <button id="txSubmit">Add expense</button></form>
         <p class="err" id="txErr"></p></div>
+      <div class="card"><h3>Import a bank statement <span class="sub">CSV from your bank</span></h3>
+        <form id="impForm" class="form"><label>Into account <select name="account_id" required></select></label>
+          <label class="drop small" id="impDrop"><input type="file" id="impFile" accept=".csv,text/csv,text/plain"><b>Choose a CSV file</b><span>You check every row before anything is saved</span></label></form>
+        <p class="hint" id="impMsg" aria-live="polite"></p></div>
       <div class="card"><h3>Repeating <span class="sub">written in automatically</span></h3><div id="recList"></div></div>
     </aside>
   </div>
@@ -401,6 +405,7 @@
 </div>
 
 <dialog id="dlg"><form method="dialog" id="dlgForm" class="form"></form></dialog>
+<dialog id="impDlg" class="wide" aria-labelledby="impTitle"><div id="impBody"></div></dialog>
 <div id="toast" role="status"></div>
 <script src="/static/app.js"></script>
 <script src="/static/planning.js"></script>

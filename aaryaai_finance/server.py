@@ -796,6 +796,54 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         a.pop("sha256", None)
         return a
 
+    # ======================= bank-statement import =======================
+    @app.get("/import/profiles")
+    def import_profiles():
+        return [{"id": p["id"], "label": p.get("label", p["id"]), "source": p.get("_source", "")} for p in ctx().rules.import_profiles]
+
+    @app.post("/import/preview")
+    def import_preview(p: dict = Body(...)):
+        """Read a statement and show what would be added. Nothing is saved."""
+        from .core import importer
+        c = ctx()
+        acc = c.db.get("accounts", int(p.get("account_id") or 0))
+        need(acc, "Pick the account this statement belongs to.")
+        raw = str(p.get("data") or "").split(",")[-1]
+        need(raw and len(raw) * 3 // 4 <= 20 * 1024 * 1024, "Choose a CSV file of at most 20 MB.")
+        try:
+            data = base64.b64decode(raw, validate=True)
+        except ValueError:
+            raise HTTPException(400, "Couldn't read the uploaded file.")
+        res = importer.parse(data, c.rules.import_profiles, p.get("profile") or None)
+        need(res.get("profile"), res.get("error") or "Couldn't read this file.")
+        existing = [t for t in c.db.list("transactions") if t["account_id"] == acc["id"] and t["kind"] != "transfer"]
+        importer.mark_duplicates(res["rows"], existing)
+        return {**res, "account": {"id": acc["id"], "name": acc["name"], "currency": acc["currency"]},
+                "new": sum(1 for r in res["rows"] if not r["duplicate"])}
+
+    @app.post("/import/apply")
+    def import_apply(p: dict = Body(...)):
+        """Save the rows you ticked in the preview, all at once (or none if one is wrong)."""
+        c = ctx()
+        acc = c.db.get("accounts", int(p.get("account_id") or 0))
+        need(acc, "Pick the account this statement belongs to.")
+        rows = p.get("rows") or []
+        need(isinstance(rows, list) and 0 < len(rows) <= 5000, "Tick at least one row to import.")
+        now = datetime.now().isoformat(timespec="seconds")
+        out = []
+        for r in rows:
+            need(isinstance(r, dict) and r.get("kind") in ("income", "expense"), "Each row needs kind income or expense.")
+            try:
+                amt = float(r.get("amount"))
+            except (TypeError, ValueError):
+                raise HTTPException(400, "Each row needs an amount.")
+            need(amt > 0, "Amounts must be more than zero.")
+            out.append({"date": r.get("date"), "kind": r["kind"], "amount": round(amt, 2), "account_id": acc["id"],
+                        "category": str(r.get("category") or "")[:80], "note": str(r.get("description") or "")[:200], "created": now})
+        ids = c.db.insert_many("transactions", out)
+        c.audit("You", f"Imported {len(ids)} entries into {acc['name']}", str(p.get("filename") or "")[:120])
+        return {"ok": True, "imported": len(ids)}
+
     # ======================= documents =======================
     @app.get("/docs/meta")
     def docs_meta():

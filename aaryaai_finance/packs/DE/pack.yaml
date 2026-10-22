@@ -297,3 +297,17 @@ model:
           type: money
           label: "Losses at this bank this year (€)"
           help: "Unused losses in this bank's loss pot (Verlusttopf). Used to remind you about a Verlustbescheinigung."
+
+# Bank-statement import (Money → Import a statement). The first profile whose header names all appear in the CSV is used.
+# Copy one into <data folder>/rules/my-rules.yaml and change the column names to fit your bank's export.
+import_profiles:
+  - id: de_buchungstag_betrag
+    label: "German bank CSV (Buchungstag · Verwendungszweck · Betrag)"
+    match: {headers_all: [Buchungstag, Verwendungszweck, Betrag]}
+    columns: {date: Buchungstag, amount: Betrag, description: [Beguenstigter/Zahlungspflichtiger, Verwendungszweck]}
+    date_format: ["%d.%m.%Y", "%d.%m.%y"]
+  - id: de_buchungsdatum_betrag
+    label: "German bank CSV (Buchungsdatum · Verwendungszweck · Betrag (€))"
+    match: {headers_all: [Buchungsdatum, Verwendungszweck, "Betrag (€)"]}
+    columns: {date: Buchungsdatum, amount: "Betrag (€)", description: [Zahlungsempfänger*in, Verwendungszweck]}
+    date_format: ["%d.%m.%y", "%d.%m.%Y"]
