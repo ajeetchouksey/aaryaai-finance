@@ -112,6 +112,29 @@ class DB:
         except sqlite3.IntegrityError as e:
             raise IntegrityProblem(_explain(str(e), spec)) from None
 
+    def insert_many(self, table: str, rows: list[dict]) -> list[int]:
+        """Add several rows at once: every row is checked against the model first, and either all are saved or none."""
+        spec = self._spec(table)
+        prepared, problems = [], []
+        for i, row in enumerate(rows):
+            cols, extra, errs = M.coerce(spec, row)
+            if errs:
+                problems.append(f"row {i + 1}: {'; '.join(errs)}")
+            if extra:
+                cols["extra"] = json.dumps(extra, ensure_ascii=False)
+            prepared.append(cols)
+        if problems:
+            raise IntegrityProblem("Nothing was saved. " + " | ".join(problems[:5]))
+        ids = []
+        try:
+            with self.conn() as c:
+                for cols in prepared:
+                    cur = c.execute(f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", list(cols.values()))
+                    ids.append(int(cur.lastrowid))
+        except sqlite3.IntegrityError as e:
+            raise IntegrityProblem(_explain(str(e), spec)) from None
+        return ids
+
     def delete(self, table: str, row_id: int) -> None:
         spec = self._spec(table)
         try:

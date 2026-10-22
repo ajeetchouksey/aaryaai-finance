@@ -219,6 +219,10 @@ details summary{cursor:pointer}
 dialog{border:1px solid rgba(169,155,255,.2);border-radius:18px;background:var(--solid);color:var(--ink);width:min(520px,calc(100vw - 24px));padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
 dialog::backdrop{background:rgba(10,12,18,.45);backdrop-filter:blur(2px)}
 dialog h3{margin:0 0 6px;font-family:var(--display)}
+dialog.wide{width:min(860px,calc(100vw - 24px))}
+.imp-rows{max-height:min(55vh,520px);overflow:auto;margin:10px 0}
+.imp-rows tr.dup td{color:var(--muted)}
+.dlg-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
 #toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,20px);background:var(--indigo);color:#fff;padding:10px 18px;border-radius:12px;opacity:0;transition:.3s;pointer-events:none;z-index:50;font-weight:500}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 .gloss{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin:0}

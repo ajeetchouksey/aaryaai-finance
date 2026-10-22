@@ -1117,6 +1117,7 @@ loaders.money = async () => {
   const keepA = f.account_id.value, keepT = f.to_account_id.value;
   f.account_id.innerHTML = opts || `<option value="">Add an account first</option>`; f.to_account_id.innerHTML = opts;
   if (keepA) f.account_id.value = keepA; if (keepT) f.to_account_id.value = keepT;
+  const imp = $("#impForm").account_id, keepI = imp.value; imp.innerHTML = opts || `<option value="">Add an account first</option>`; if (keepI) imp.value = keepI;
   if (!f.date.value) f.date.value = new Date().toISOString().slice(0, 10);
   setKind(MONEY.kind, true);
   // kpis
@@ -1363,4 +1364,47 @@ async function checkUpdate(force) {
     };
   } else el.hidden = true;
   return u;
+}
+
+
+// ---------------- bank-statement import ----------------
+// The file is read by an import profile (packs or your rules); you see every row and untick what you don't want.
+// Rows that are already in the account (same date, type and amount) start unticked.
+$("#impFile").onchange = async (e) => {
+  const file = e.target.files[0]; e.target.value = "";
+  if (!file) return;
+  const account_id = $("#impForm").account_id.value;
+  if (!account_id) { $("#impMsg").textContent = "Add an account first."; return; }
+  $("#impMsg").textContent = "Reading " + file.name + "…";
+  try {
+    const p = await api("/import/preview", { method: "POST", body: { account_id, filename: file.name, data: await readAsDataURL(file) } });
+    $("#impMsg").textContent = "";
+    showImport(p, file.name);
+  } catch (err) { $("#impMsg").textContent = err.message; }
+};
+function showImport(p, filename) {
+  const c = p.account.currency, d = $("#impDlg");
+  const row = (r) => `<tr class="${r.duplicate ? "dup" : ""}"><td><input type="checkbox" data-i="${r.i}" ${r.duplicate ? "" : "checked"} aria-label="Import this row"></td>
+    <td>${esc(r.date)}</td><td>${esc(hideAmt(r.description)) || `<span class="hint">no description</span>`}${r.duplicate ? ` <span class="tag">already there</span>` : ""}</td>
+    <td class="n ${r.kind === "income" ? "pos" : ""}">${r.kind === "income" ? "+" : "−"}${money(r.amount, c, 2)}</td></tr>`;
+  $("#impBody").innerHTML = `<h3 id="impTitle">Import into ${esc(p.account.name)}</h3>
+    <p class="hint">${esc(filename)} · read with “${esc(p.profile.label)}” (${esc(p.profile.source)}) · ${p.rows.length} rows, ${p.new} new${p.skipped.length ? ` · ${p.skipped.length} lines skipped` : ""}</p>
+    <div class="tablewrap imp-rows"><table class="rt"><thead><tr><th><input type="checkbox" id="impAll" aria-label="Tick all" ${p.new === p.rows.length ? "checked" : ""}></th><th>Date</th><th>Description</th><th class="n">Amount</th></tr></thead>
+      <tbody>${p.rows.map(row).join("") || `<tr><td colspan="4" class="hint">No rows with a date and an amount.</td></tr>`}</tbody></table></div>
+    ${p.skipped.length ? `<details><summary class="hint">Lines that were skipped</summary><ul class="hint">${p.skipped.map((s) => `<li>Line ${s.line}: ${esc(s.reason)} · ${esc(hideAmt(s.text))}</li>`).join("")}</ul></details>` : ""}
+    <div class="dlg-actions"><button type="button" class="ghost" id="impCancel">Cancel</button><button type="button" id="impGo"></button></div>`;
+  const boxes = () => $$("#impBody tbody input[type=checkbox]");
+  const count = () => { const n = boxes().filter((b) => b.checked).length; $("#impGo").textContent = n ? `Import ${n} ${n === 1 ? "entry" : "entries"}` : "Nothing ticked"; $("#impGo").disabled = !n; };
+  boxes().forEach((b) => b.onchange = count);
+  $("#impAll").onchange = (e) => { boxes().forEach((b) => b.checked = e.target.checked); count(); };
+  $("#impCancel").onclick = () => d.close();
+  $("#impGo").onclick = async () => {
+    const rows = boxes().filter((b) => b.checked).map((b) => p.rows[+b.dataset.i]);
+    $("#impGo").disabled = true;
+    try {
+      const r = await api("/import/apply", { method: "POST", body: { account_id: p.account.id, filename, rows } });
+      d.close(); toast(`Imported ${r.imported} ${r.imported === 1 ? "entry" : "entries"}`); loaders.money();
+    } catch (err) { toast(err.message); $("#impGo").disabled = false; }
+  };
+  count(); d.showModal();
 }
