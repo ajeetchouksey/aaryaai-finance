@@ -199,7 +199,12 @@
         <div class="card"><h3>In vs out <span class="sub" id="trendSub"></span></h3><div class="chartbox"><canvas id="chTrend"></canvas></div></div>
         <div class="card"><h3>Where it went</h3><div class="chartbox"><canvas id="chCats"></canvas></div></div>
       </div>
-      <div class="card"><h3>Transactions <span class="sub" id="txCount"></span></h3><div id="txList" class="txlist"></div></div>
+      <div class="card"><h3>Transactions <span class="sub" id="txCount"></span></h3>
+        <div class="txtools"><input id="txSearch" type="search" placeholder="Search note, category, account or amount" aria-label="Search transactions">
+          <select id="txKind" aria-label="Type"><option value="">All types</option><option value="expense">Expenses</option><option value="income">Income</option><option value="transfer">Transfers</option></select>
+          <select id="txCat" aria-label="Category"><option value="">All categories</option></select>
+          <button type="button" class="sm ghost" id="txExport">Export CSV</button></div>
+        <div id="txList" class="txlist"></div></div>
     </div>
     <aside>
       <div class="card quick"><h3>Add an entry</h3>

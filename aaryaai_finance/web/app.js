@@ -1140,9 +1140,24 @@ loaders.money = async () => {
   if (cats.length) chart("chCats", doughnut(cats.map((x) => x[0]), cats.map((x) => x[1]), [fmtC(sum.expense, c), "spent"]));
   else { charts.chCats?.destroy(); delete charts.chCats; }
   // transactions
-  $("#txCount").textContent = sum.transactions.length ? `${sum.transactions.length} in this ${MONEY.period}` : "";
+  MONEY.tx = sum.transactions; MONEY.hasAccounts = acc.accounts.length > 0;
+  const usedCats = [...new Set(MONEY.tx.map((t) => t.category).filter(Boolean))].sort(), keepCat = $("#txCat").value;
+  $("#txCat").innerHTML = `<option value="">All categories</option>` + usedCats.map((x) => `<option>${esc(x)}</option>`).join("");
+  if (usedCats.includes(keepCat)) $("#txCat").value = keepCat;
+  drawTx();
+  drawRecurring(acc.recurring || []);
+};
+// The period's entries, narrowed by the search box and filters (nothing is fetched again while you type).
+function txFiltered() {
+  const q = $("#txSearch").value.trim().toLowerCase(), kind = $("#txKind").value, cat = $("#txCat").value;
+  return (MONEY.tx || []).filter((t) => (!kind || t.kind === kind) && (!cat || t.category === cat) &&
+    (!q || [t.note, t.category, t.account, t.to_account, String(t.amount)].some((x) => String(x || "").toLowerCase().includes(q))));
+}
+function drawTx() {
+  const all = MONEY.tx || [], list = txFiltered(), c = MONEY.ccy, hasAccounts = MONEY.hasAccounts;
+  $("#txCount").textContent = all.length ? (list.length === all.length ? `${all.length} in this ${MONEY.period}` : `${list.length} of ${all.length} in this ${MONEY.period}`) : "";
   let day = "";
-  $("#txList").innerHTML = sum.transactions.map((t) => {
+  $("#txList").innerHTML = list.map((t) => {
     const d = new Date(t.date), head = t.date !== day ? `<div class="txday"><span>${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</span></div>` : ""; day = t.date;
     const sign = t.kind === "income" ? "+" : t.kind === "expense" ? "−" : "⇄ ";
     const title = t.kind === "transfer" ? `${esc(t.account)} → ${esc(t.to_account)}` : esc(t.note || t.category || (t.kind === "income" ? "Income" : "Expense"));
@@ -1151,10 +1166,36 @@ loaders.money = async () => {
     return head + `<div class="tx ${t.kind}"><div class="ic">${t.kind === "transfer" ? "⇄" : CAT_ICON[t.category] || "•"}</div>
       <div><div class="t1">${title}</div><div class="t2">${sub}${t.recurring_id ? `<span class="rep">↻ repeating</span>` : ""}${t.doc_id ? `<span class="rep">📎</span>` : ""}</div></div>
       <div class="amt">${sign}${fmtC(t.amount, t.currency)}${cv}</div>
-      ${t.recurring_id ? `<button class="del" onclick="delTx(${t.id})" aria-label="Skip this one" title="Skip this one (the repeating entry stays)">✕</button>`
-        : `<button class="del" onclick="delTx(${t.id})" aria-label="Delete" title="Delete">✕</button>`}</div>`;
-  }).join("") || `<div class="empty">${acc.accounts.length ? `Nothing logged for this ${MONEY.period} yet — add an entry on the right.` : "Start by adding your accounts above, then log income and spending."}</div>`;
-  drawRecurring(acc.recurring || []);
+      <div class="txbtns"><button class="del" onclick="editTx(${Number(t.id)})" aria-label="Edit" title="Edit">✎</button>${t.recurring_id ? `<button class="del" onclick="delTx(${t.id})" aria-label="Skip this one" title="Skip this one (the repeating entry stays)">✕</button>`
+        : `<button class="del" onclick="delTx(${t.id})" aria-label="Delete" title="Delete">✕</button>`}</div></div>`;
+  }).join("") || `<div class="empty">${!hasAccounts ? "Start by adding your accounts above, then log income and spending." : all.length ? "Nothing matches your search." : `Nothing logged for this ${MONEY.period} yet — add an entry on the right.`}</div>`;
+}
+$("#txSearch").addEventListener("input", drawTx);
+$("#txKind").onchange = drawTx; $("#txCat").onchange = drawTx;
+// Edit an entry: the same checks as adding one. Moving a repeating entry's date leaves that date empty.
+window.editTx = (id) => {
+  const t = (MONEY.tx || []).find((x) => x.id === id); if (!t) return;
+  const accts = MONEY.accts.map((a) => [a.id, `${a.name} (${a.currency})`]);
+  const cats = t.kind === "income" ? MONEY.meta.income_categories : MONEY.meta.expense_categories;
+  const fields = [["date", "Date", "date"], ["amount", "Amount", "number"], ["account_id", t.kind === "income" ? "Into account" : "From account", "select", accts]];
+  if (t.kind === "transfer") fields.push(["to_account_id", "To account", "select", accts], ["to_amount", "Amount received", "number"]);
+  else fields.push(["category", "Category", "select", ["", ...new Set([...(t.category && !cats.includes(t.category) ? [t.category] : []), ...cats])]]);
+  fields.push(["note", "Note"]);
+  dialog(`Edit ${t.kind}`, fields, t, async (r) => {
+    const row = { id: t.id, kind: t.kind, date: r.date, amount: r.amount, account_id: +r.account_id, note: r.note || null, category: t.kind === "transfer" ? null : (r.category || null),
+      to_account_id: t.kind === "transfer" ? +r.to_account_id : null, to_amount: t.kind === "transfer" ? r.to_amount : null, recurring_id: t.recurring_id, doc_id: t.doc_id };
+    await api("/api/transactions", { method: "POST", body: row }); loaders.money();
+  });
+};
+// Export what you see (after search and filters) as CSV for a spreadsheet. Text that a spreadsheet would run as a
+// formula (=, +, -, @ at the start) is prefixed with an apostrophe.
+$("#txExport").onclick = () => {
+  const cell = (v) => { let s = String(v ?? ""); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const rows = [["Date", "Type", "Amount", "Currency", "Account", "To account", "Amount received", "Category", "Note"],
+    ...txFiltered().map((t) => [t.date, t.kind, t.amount, t.currency, t.account, t.to_account || "", t.kind === "transfer" ? (t.to_amount ?? "") : "", t.category || "", t.note || ""])];
+  const blob = new Blob(["\ufeff" + rows.map((r) => r.map(cell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `aaryaai-finance-${MONEY.period}-${MONEY.anchor}.csv`;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 function drawRecurring(list) {
   const accts = Object.fromEntries(MONEY.accts.map((a) => [a.id, a]));

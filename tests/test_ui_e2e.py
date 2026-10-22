@@ -401,6 +401,33 @@ def test_chat_suggestion_waits_for_approval(page, monkeypatch):
     assert len(page.evaluate("api('/api/transactions')")) == before + 1
 
 
+# ---------------------------------------------------------------- Money: search, edit and export
+def test_search_edit_and_export_transactions(page):
+    acc = page.evaluate("api('/api/accounts')")[0]["id"]
+    today = page.evaluate("new Date().toLocaleDateString('sv')")
+    page.evaluate(f"api('/api/transactions', {{method: 'POST', body: {{date: '{today}', kind: 'expense', account_id: {acc}, amount: 12.5, "
+                  f"category: 'Groceries', note: '=UI test formula shop'}}}})")
+    go(page, "money", "#txList")
+    page.click("#perSeg button[data-p=month]")
+    page.wait_for_function("document.querySelector('#txList').innerText.includes('UI test formula shop')")
+    total = page.locator("#txList .tx").count()
+    page.fill("#txSearch", "formula shop")
+    page.wait_for_function("document.querySelectorAll('#txList .tx').length === 1")
+    assert " of " in page.locator("#txCount").inner_text() and total > 1
+    with page.expect_download() as dl:
+        page.click("#txExport")
+    text = Path(dl.value.path()).read_text(encoding="utf-8-sig")
+    assert text.splitlines()[0].startswith("Date,Type,Amount") and "'=UI test formula shop" in text
+    page.locator("#txList .tx button[aria-label=Edit]").click()
+    dlg = page.locator("#dlg")
+    dlg.wait_for(state="visible")
+    dlg.locator("input[name=amount]").fill("13.75")
+    dlg.locator("button:has-text('Save')").click()
+    page.wait_for_function("document.querySelector('#txList').innerText.includes('13,75') || document.querySelector('#txList').innerText.includes('13.75')")
+    assert any(t["amount"] == 13.75 and (t["note"] or "").endswith("formula shop") for t in page.evaluate("api('/api/transactions')"))
+    page.fill("#txSearch", "")
+
+
 # ---------------------------------------------------------------- first-time setup
 def test_setup_wizard_on_an_empty_folder(browser, tmp_path):
     fresh = tmp_path / "fresh"

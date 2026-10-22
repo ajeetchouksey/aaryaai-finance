@@ -468,6 +468,9 @@ nav#tabs button.on:hover{background:linear-gradient(135deg,rgba(91,75,214,.35),r
 .tx .amt small{display:block;font:500 11px var(--num);color:var(--muted)}
 .tx .del{background:none;box-shadow:none;color:var(--muted);padding:4px 6px;opacity:0}
 .tx:hover .del{opacity:1}
+.txbtns{display:flex;gap:2px}
+.txtools{display:grid;grid-template-columns:1fr auto auto auto;gap:8px;margin:4px 0 12px}
+@media (max-width:760px){.txtools{grid-template-columns:1fr 1fr}.txtools input{grid-column:1/-1}}
 .rep{font:500 10.5px var(--num);color:var(--lilac);background:rgba(169,155,255,.12);border-radius:10px;padding:1px 7px}
 .acctchip{font:500 10.5px var(--num);border-radius:10px;padding:1px 7px;background:rgba(148,163,184,.1)}
 .acctchip.EUR{color:var(--eur)}.acctchip.INR{color:var(--inr)}
