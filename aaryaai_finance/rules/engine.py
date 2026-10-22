@@ -80,10 +80,11 @@ def squash(s: str) -> str:
 
 
 def _to_float(s: str) -> float | None:
+    """A number written the German (68.400,00), English (68,400.00) or Indian (1,20,000) way; "12,50" is 12.5."""
     s = s.strip().replace("₹", "").replace("€", "").replace("Rs.", "").replace("Rs", "").strip()
     if re.fullmatch(r"-?\d{1,3}(\.\d{3})+(,\d{1,2})?", s):
         s = s.replace(".", "").replace(",", ".")
-    elif re.fullmatch(r"-?\d{1,3}(,\d{2,3})+(\.\d{1,2})?", s):
+    elif re.fullmatch(r"-?\d{1,3}(,\d{2,3})*,\d{3}(\.\d{1,2})?", s):      # thousands groups always end in three digits
         s = s.replace(",", "")
     elif re.fullmatch(r"-?\d+,\d{1,2}", s):
         s = s.replace(",", ".")
