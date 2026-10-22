@@ -392,7 +392,14 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         cf["base"] = c.base
         cf["income_source"] = "your setting" if s.get("monthly_income") else (f"{acts.get('basis', 'recent months')} in Money" if acts["income"] else "not set")
         cf["spend_source"] = "your budget in Plan" if budget else (f"{acts.get('basis', 'recent months')} in Money" if acts["expense"] else "not set")
+        cf["wants"] = list(dict.fromkeys(ledger.DEFAULT_WANTS + [w for p in c.packs.values() for w in (p.get("categories") or {}).get("wants", [])]))
         return cf
+
+    @app.get("/budget/status")
+    def budget_status():
+        c = ctx()
+        ledger.materialize_recurring(c.db)
+        return ledger.budget_status(c.db, c.base, c.rates)
 
 
     # ======================= home, forecast, plan, diversify, opportunities =======================
@@ -438,6 +445,7 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
                 "cushion_months": round(nw["liquid"] / spend, 1) if spend else None, "cushion_target": float(json.loads(c.db.settings().get("diversify_rules") or "{}").get("min_cash_months", 6)),
                 "monthly_spend": round(spend, 2), "next90": f["next90"], "deadlines30": len(soon30), "next_deadline": soon30[0] if soon30 else (cal[0] if cal else None),
                 "attention": attention, "coming": coming[:8],
+                "budget_over": [r for r in ledger.budget_status(c.db, c.base, c.rates)["rows"] if r["status"] == "over"][:4],
                 "goals": [{k: x[k] for k in ("id", "name", "probability", "currency", "saved", "target_future", "monthly", "monthly_for_85", "target_date")} for x in g["goals"]],
                 "proposals": pend, "routines": runs[:4], "opportunities": {"count": len(opp["cards"]), "total_base": opp["total_base"],
                                                                             "top": opp["cards"][:2]},

@@ -80,6 +80,7 @@
     <p>Everything below is worked out on this computer from your own entries and rules.</p></div>
     <span style="display:flex;gap:8px;flex-wrap:wrap" id="homeChips"></span></div>
   <div id="homeAttention"></div>
+  <div id="homeBudget"></div>
   <div class="kpis" id="homeKpis"></div>
   <div class="grid g-hero" style="margin-top:16px"><div class="card" id="homeCcy"></div><div class="card" id="homeComing"></div></div>
   <div class="grid g2"><div class="card" id="homeGoals"></div><div class="card" id="homeInbox"></div></div>
@@ -265,10 +266,11 @@
     <p>The gap between take-home pay and spending is what funds every goal. Aim to save 20% or more, and keep 3–6 months of spending in cash.</p></div>
     <button class="sm" onclick="editExpense()">＋ Add spending</button></div>
   <div class="kpis" id="cfKpis"></div>
+  <div class="card"><h3>This month: budget vs spent <span class="sub" id="bvaSub"></span></h3><div id="bva"></div></div>
   <div class="card"><h3>Where each month's pay goes</h3><div id="flow"></div><p class="hint" id="cfSrc" style="margin-bottom:0"></p></div>
   <div class="card"><h3>The 50/30/20 check <span class="sub">a common rule of thumb: 50% needs, 30% wants, 20% savings</span></h3><div id="rule"></div></div>
   <div class="grid g2">
-    <div class="card"><h3>Monthly spending <span class="sub">EUR</span></h3><table id="expTbl" class="rt"></table></div>
+    <div class="card"><h3>Monthly spending <span class="sub" id="expCcy"></span></h3><table id="expTbl" class="rt"></table></div>
     <div class="card"><h3>What the numbers say</h3><ul class="ideas" id="cfTips"></ul>
       <h3 style="margin-top:18px">Your monthly order of play</h3>
       <ol class="ideas"><li>Pay tax deadlines — penalties are the worst “investment”.</li><li>Emergency fund to 3–6 months.</li>
