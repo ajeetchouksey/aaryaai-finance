@@ -12,6 +12,7 @@ Start it by hand to test:  aaryaai-finance mcp --data-dir PATH   (then type JSON
 from __future__ import annotations
 
 import json
+import uuid
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -101,8 +102,11 @@ class Server:
                     raise ValueError("kind must be income or expense")
                 action, what = {"type": "add_transaction", "row": row}, "transaction"
             key = f"mcp:{what}:{acc['id']}:{d}:{amt}:{a['kind']}"
-            pid = c.propose(key, f"MCP · {self.client}", f"{a['kind'].title()} {amt:,.2f} {acc['currency']} on {d} ({acc['name']})",
-                            a.get("note") or "", f"suggested by {self.client}", action)
+            args = (f"MCP · {self.client}", f"{a['kind'].title()} {amt:,.2f} {acc['currency']} on {d} ({acc['name']})",
+                    a.get("note") or "", f"suggested by {self.client}", action)
+            pid = c.propose(key, *args)           # a retry while it is still pending refreshes the same proposal
+            if pid is None:                       # the same entry was decided before: this is a new one
+                pid = c.propose(f"{key}:{uuid.uuid4().hex[:8]}", *args)
             return {"proposal_id": pid, "status": "waiting for the user's approval in the app (Routines → Proposals)"}
         raise KeyError(name)
 

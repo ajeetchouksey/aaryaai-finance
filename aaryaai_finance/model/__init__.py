@@ -15,7 +15,6 @@ from __future__ import annotations
 import copy
 import json
 import re
-import shutil
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
@@ -188,7 +187,8 @@ def sync(db_path: Path, model: dict, backup_dir: Path | None = None) -> dict:
             backup_dir.mkdir(parents=True, exist_ok=True)
             b = backup_dir / f"finance-before-schema-{datetime.now():%Y%m%d-%H%M%S}.db"
             con.commit()
-            shutil.copy2(db_path, b)
+            backup_copy(db_path, b)
+            prune_backups(backup_dir)
             report["backup"] = str(b)
         con.execute("BEGIN")
         for action, name, spec in todo:
@@ -202,11 +202,11 @@ def sync(db_path: Path, model: dict, backup_dir: Path | None = None) -> dict:
             for s in index_sql(name, spec):
                 con.execute(s)
         report["repaired"] = _repair_orphans(con, model)
+        bad = con.execute("PRAGMA foreign_key_check").fetchall()
+        if bad:                                   # checked before COMMIT, so a failed change leaves the database as it was
+            raise ModelError(f"Database still has {len(bad)} broken links after repair")
         con.execute(f"PRAGMA user_version={int(model.get('version', 1))}")
         con.execute("COMMIT")
-        bad = con.execute("PRAGMA foreign_key_check").fetchall()
-        if bad:
-            raise ModelError(f"Database still has {len(bad)} broken links after repair")
     except Exception:
         if con.in_transaction:
             con.execute("ROLLBACK")
@@ -418,6 +418,27 @@ def friendly_error(e: Exception) -> str:
     if "FOREIGN KEY" in m.upper():
         return "some records would link to records that don't exist"
     return m
+
+
+def backup_copy(db_path: Path, target: Path) -> Path:
+    """A consistent copy of the database, even while another process (MCP, a routine) is writing to it."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    src, dst = sqlite3.connect(db_path, timeout=10), sqlite3.connect(target)
+    try:
+        src.backup(dst)
+    finally:
+        src.close(); dst.close()
+    return target
+
+
+def prune_backups(backup_dir: Path, keep: int = 20, keep_days: int = 30) -> list[Path]:
+    """Remove the app's own old backups: the newest `keep` and anything from the last `keep_days` days always stay."""
+    files = sorted(backup_dir.glob("finance-before-*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+    cutoff = datetime.now().timestamp() - keep_days * 86400
+    gone = [p for p in files[keep:] if p.stat().st_mtime < cutoff]
+    for p in gone:
+        p.unlink(missing_ok=True)
+    return gone
 
 
 def dry_run(db_path: Path, model: dict) -> dict:
