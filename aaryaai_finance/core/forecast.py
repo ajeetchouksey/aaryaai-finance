@@ -75,6 +75,7 @@ def collect_flows(accounts: list[dict], recurring: list[dict], planned: list[dic
     acc = {a["id"]: a for a in accounts}
     liquid = {a["id"] for a in accounts if a.get("liquid") and not a.get("archived")}
     flows: list[Flow] = []
+    missing_rates: set[str] = set()
 
     def ccy(aid):
         return acc[aid]["currency"] if aid in acc else None
@@ -86,7 +87,11 @@ def collect_flows(accounts: list[dict], recurring: list[dict], planned: list[dic
     def transfer(d, frm, to, amount, to_amount, **kw):
         out_ccy, in_ccy = ccy(frm), ccy(to)
         if to_amount is None and out_ccy and in_ccy:
-            to_amount = convert(amount, out_ccy, in_ccy, rates)
+            try:
+                to_amount = convert(amount, out_ccy, in_ccy, rates)
+            except ValueError:                # no rate for this pair: show the money leaving, and say why the other side is missing
+                missing_rates.add(f"{out_ccy}→{in_ccy}")
+                to_amount = None
         add(d, frm, -amount, **kw)
         add(d, to, to_amount or 0, **kw)
 
@@ -182,6 +187,8 @@ def collect_flows(accounts: list[dict], recurring: list[dict], planned: list[dic
             by_month[ccy(tx["account_id"])][month_key(d)] += tx["amount"]
     for c, months in by_month.items():
         vals = [months.get(month_key(add_months(first_full, i, 1)), 0.0) for i in range(6)]
+        while vals and vals[0] == 0:          # months before you started using the app aren't months of zero spending
+            vals.pop(0)
         active = [v for v in vals if v > 0]
         if len(active) >= 2:
             learned[c] = round(statistics.median(vals), 2)
@@ -197,7 +204,7 @@ def collect_flows(accounts: list[dict], recurring: list[dict], planned: list[dic
                                           category="Other spending"))
             d = add_months(d, 1, 1)
     flows.sort(key=lambda f: (f["date"], f["amount"] < 0, f["label"]))
-    return flows, learned
+    return flows, learned, sorted(missing_rates)
 
 
 def simulate(start_bal: dict, flows: list[Flow], months: list[str]) -> dict:
@@ -244,7 +251,7 @@ def forecast(accounts_with_balance: list[dict], recurring: list[dict], planned: 
     end_month = add_months(today.replace(day=1), months - 1, 1)
     end = end_month.replace(day=calendar.monthrange(end_month.year, end_month.month)[1])
     month_list = [month_key(add_months(today.replace(day=1), i, 1)) for i in range(months)]
-    flows, learned = collect_flows(accounts_with_balance, recurring, planned, trackers, transactions, rates, today, end, scenario)
+    flows, learned, missing_rates = collect_flows(accounts_with_balance, recurring, planned, trackers, transactions, rates, today, end, scenario)
     start_bal = defaultdict(float)
     for a in accounts_with_balance:
         if a.get("liquid") and not a.get("archived"):
@@ -306,7 +313,12 @@ def forecast(accounts_with_balance: list[dict], recurring: list[dict], planned: 
             continue
         d_c, _, room = best
         recv = _nice_up(need)
-        send = conv(recv, c, d_c) * 1.01
+        send = conv(recv, c, d_c)
+        if send is None:                      # no rate between these two: can't size a transfer
+            step["unfunded"] = True
+            unfunded.append(step)
+            continue
+        send *= 1.01
         send = _nice_up(send)
         if send > room:
             send = math.floor(room)
@@ -347,7 +359,7 @@ def forecast(accounts_with_balance: list[dict], recurring: list[dict], planned: 
     return {"today": today.isoformat(), "base": base, "months": month_list, "scenario": scenario, "scenarios": SCENARIOS,
             "start": {c: round(v, 2) for c, v in start_bal.items()}, "floors": floors, "floor_source": floor_source,
             "series": sim, "series_without_plan": base_sim, "lowest": lowest, "plan": plan, "unfunded": unfunded,
-            "watch": watch, "options": options, "learned": learned,
+            "watch": watch, "options": options, "learned": learned, "missing_rates": missing_rates,
             "next90": {"in": round(in90, 2), "out": round(out90, 2), "net": round(in90 - out90, 2)},
             "items": [_public(f) for f in work], "sources": sources(flows, months)}
 

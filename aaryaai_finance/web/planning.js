@@ -143,7 +143,8 @@ loaders.forecast = async () => {
   $("#fcScenarios").innerHTML = Object.entries(f.scenarios).map(([k, v]) => `<button class="pillbtn ${k === f.scenario ? "on" : ""}" onclick="FC.scenario='${k}';loaders.forecast()">${esc(v)}</button>`).join("") +
     `<span class="li-s" style="margin-left:auto">12 months from today · rebuilt by the Forecast refresh routine every morning</span>`;
   const ccys = Object.keys(f.series).sort((a, b) => (a === f.base ? -1 : b === f.base ? 1 : a.localeCompare(b)));
-  $("#fcCharts").innerHTML = ccys.map((c) => {
+  const noRate = f.missing_rates?.length ? `<p class="hint">No exchange rate for ${esc(f.missing_rates.join(", "))}: those transfers only show the money leaving. Refresh rates or add one in Settings.</p>` : "";
+  $("#fcCharts").innerHTML = noRate + ccys.map((c) => {
     const rows = f.series[c], fl = f.floors[c] || 0, lo = f.lowest[c];
     const scale = Math.max(...rows.map((r) => Math.abs(r.end)), fl) >= 1e5 && c === "INR" ? 1e5 : 1000;
     const unit = scale === 1e5 ? "lakh" : "thousand";

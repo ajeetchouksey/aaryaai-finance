@@ -517,7 +517,8 @@ class RuleSet:
                 **conf, "candidates": candidates, "fields": f, **tgt, "excerpt": re.sub(r"\s+", " ", text)[:600]}
 
     # ---------------- deadlines
-    def deadlines(self, answers: dict, today: date | None = None, horizon_days: int = 460) -> list[dict]:
+    def deadlines(self, answers: dict, today: date | None = None, horizon_days: int = 460, overdue_days: int = 30) -> list[dict]:
+        """Every occurrence from `overdue_days` ago (so a missed one shows as late instead of vanishing) to `horizon_days` ahead."""
         today = today or date.today()
         out = []
         for r in self.deadline_rules:
@@ -538,7 +539,7 @@ class RuleSet:
                     continue
                 seen.add(d)
                 dd = date.fromisoformat(d)
-                if today - timedelta(days=0) <= dd <= today + timedelta(days=horizon_days):
+                if today - timedelta(days=overdue_days) <= dd <= today + timedelta(days=horizon_days):
                     out.append(self._dl(r, d, ty))
         return sorted(out, key=lambda x: (x["due"] is None, x["due"] or ""))
 

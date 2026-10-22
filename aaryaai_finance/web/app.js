@@ -1126,7 +1126,8 @@ loaders.money = async () => {
     return head + `<div class="tx ${t.kind}"><div class="ic">${t.kind === "transfer" ? "⇄" : CAT_ICON[t.category] || "•"}</div>
       <div><div class="t1">${title}</div><div class="t2">${sub}${t.recurring_id ? `<span class="rep">↻ repeating</span>` : ""}${t.doc_id ? `<span class="rep">📎</span>` : ""}</div></div>
       <div class="amt">${sign}${fmtC(t.amount, t.currency)}${cv}</div>
-      ${t.recurring_id ? `<span></span>` : `<button class="del" onclick="delTx(${t.id})" aria-label="Delete" title="Delete">✕</button>`}</div>`;
+      ${t.recurring_id ? `<button class="del" onclick="delTx(${t.id})" aria-label="Skip this one" title="Skip this one (the repeating entry stays)">✕</button>`
+        : `<button class="del" onclick="delTx(${t.id})" aria-label="Delete" title="Delete">✕</button>`}</div>`;
   }).join("") || `<div class="empty">${acc.accounts.length ? `Nothing logged for this ${MONEY.period} yet — add an entry on the right.` : "Start by adding your accounts above, then log income and spending."}</div>`;
   drawRecurring(acc.recurring || []);
 };

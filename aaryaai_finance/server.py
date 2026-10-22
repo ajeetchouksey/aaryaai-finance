@@ -241,6 +241,12 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         if "ai" in p:
             cfg["ai"] = {**cfg["ai"], **p["ai"]}
         if "fx" in p:
+            for k, v in ((p["fx"] or {}).get("manual_rates") or {}).items():
+                try:
+                    ok = v in (None, "") or float(v) > 0
+                except (TypeError, ValueError):
+                    ok = False
+                need(ok, f"The exchange rate for {k} must be a number above zero.")
             cfg["fx"] = {**cfg["fx"], **p["fx"]}
         if "updates" in p:
             cfg["updates"] = {**cfg.get("updates", {}), "check": bool(p["updates"].get("check", True))}
@@ -292,6 +298,10 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
             _check_paper_trade(c, row)
         if table in ("transactions", "recurring"):
             _check_money_row(c, table, row)
+        if table == "transactions" and row.get("id"):
+            old = c.db.get("transactions", row["id"])
+            if old and old.get("recurring_id") and row.get("date") and row["date"] != old["date"]:
+                ledger.skip_occurrence(c.db, old["recurring_id"], old["date"])     # moved: the old date stays empty
         if table == "calendar":
             row.setdefault("key", "user:" + datetime.now().strftime("%Y%m%d%H%M%S%f"))
             row.setdefault("source", "yours"); row.setdefault("status", "open")
@@ -305,7 +315,10 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
     @app.delete("/api/{table}/{row_id}")
     def delete_row(table: str, row_id: int):
         need(table in ctx().db.tables, "Unknown table", 404)
+        old = ctx().db.get(table, row_id) if table == "transactions" else None
         ctx().db.delete(table, row_id)
+        if old and old.get("recurring_id"):          # one occurrence of a repeating entry: don't create it again
+            ledger.skip_occurrence(ctx().db, old["recurring_id"], old["date"])
         ctx().audit("You", f"Deleted {ctx().db.model['entities'][table].get('label', table).lower()}", f"#{row_id}")
         return {"ok": True}
 
@@ -608,7 +621,16 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
     def put_app_settings(p: dict = Body(...)):
         for k, v in p.items():
             if k in ("monthly_income", "paper_starting_cash"):
-                ctx().db.set_setting(k, v)
+                label = k.replace("_", " ").capitalize()
+                if v in (None, "") and k == "monthly_income":
+                    ctx().db.set_setting(k, "")             # empty: use the average from Money
+                    continue
+                try:
+                    n = float(v)
+                except (TypeError, ValueError):
+                    raise HTTPException(400, f"{label} must be a number.")
+                need(n > 0 if k == "paper_starting_cash" else n >= 0, f"{label} must be more than zero.")
+                ctx().db.set_setting(k, n)
         return app_settings()
 
     # ======================= money =======================

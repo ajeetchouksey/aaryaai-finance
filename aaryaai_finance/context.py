@@ -63,7 +63,10 @@ class Ctx:
         manual_wins = cfg.get("source") == "manual"
         for k, v in (cfg.get("manual_rates") or {}).items():
             if v and (manual_wins or k not in r):
-                r[k] = float(v)
+                try:
+                    r[k] = float(v)
+                except (TypeError, ValueError):   # a hand-edited config.yaml must not break every screen
+                    continue
         return r
 
     def conv(self, amount, frm, to=None):
