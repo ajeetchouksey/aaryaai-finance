@@ -342,6 +342,32 @@ def test_hide_amounts(page):
     page.wait_for_function("!document.querySelector('#homeKpis .kpi').innerText.includes('•')")
 
 
+# ---------------------------------------------------------------- charts say what they show
+def test_charts_have_a_summary_and_a_table(page):
+    go(page, "position", "#chCat[role=img]")
+    label = page.get_attribute("#chCat", "aria-label")
+    assert label.startswith("What you own, by type:") and "%" in label
+    det = page.locator("#chCat").locator("xpath=ancestor::div[contains(@class,'chartbox')]/following-sibling::details[1]")
+    assert det.locator("summary").inner_text() == "View as table" and not det.get_attribute("open")
+    det.locator("summary").click()
+    rows = det.locator("tbody tr")
+    assert rows.count() >= 2 and "€" in rows.first.inner_text()
+    hist = page.get_attribute("#chHist", "aria-label")
+    assert "So far:" in hist and "Outlook:" in hist and "lowest" in hist
+    go(page, "forecast", "#fcCharts .vbars[role=img]")
+    bars = page.locator("#fcCharts .vbars").first.get_attribute("aria-label")
+    assert "month-end balance" in bars and "lowest" in bars and "floor" in bars
+    assert page.locator("#fcCharts details.charttable").first.locator("tbody tr").count() == 12
+    page.keyboard.press("Alt+KeyH")
+    page.wait_for_function("document.body.classList.contains('amounts-hidden')")
+    try:
+        go(page, "position", "#chCat[role=img]")
+        page.wait_for_function("document.querySelector('#chCat').getAttribute('aria-label').includes('•')")
+        assert not re.search(r"€\s?\d", det.locator("tbody").inner_text())                  # the table hides amounts too
+    finally:
+        page.keyboard.press("Alt+KeyH")
+
+
 def test_hide_amounts_covers_fields_units_toasts_and_chat(page):
     page.keyboard.press("Alt+KeyH")
     page.wait_for_function("document.body.classList.contains('amounts-hidden')")
