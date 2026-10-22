@@ -890,7 +890,7 @@ loaders.settings = async () => {
       ${k === "azure_openai" ? `<div class="row2"><label>Deployment <input name="deployment" value="${esc(ai.deployment || "")}"></label><label>API version <input name="api_version" value="${esc(ai.api_version || "2024-10-21")}"></label></div>` : ""}
       ${k !== "none" ? `<label>Model ${v.models ? `<select name="model">${v.models.map((m) => `<option ${m === (ai.model || v.default_model) ? "selected" : ""}>${esc(m)}</option>`).join("")}</select>` : `<input name="model" value="${esc(ai.model || "")}">`}</label>` : ""}
       ${secretKey ? `<label>${k === "github_models" ? "GitHub token" : "API key"} <input name="secret" type="password" placeholder="${c.secrets_set[secretKey] ? "saved — leave blank to keep" : "paste here"}"><span class="fieldhint">${c.secrets_storage === "keychain" ? "🔒 Stored in your system keychain (Windows Credential Manager / macOS Keychain), not in a file." : "Stored in secrets.json in your data folder (no system keychain found)."}</span></label>` : ""}
-      ${k === "anthropic" ? `<label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" name="web" ${ai.web_search !== false ? "checked" : ""}> Allow web search for current tax rules</label>` : ""}
+      ${k === "anthropic" ? `<label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" name="web" ${ai.web_search === true ? "checked" : ""}> Allow web search for current tax rules (off by default)</label>` : ""}
       <div style="display:flex;gap:8px"><button>Save</button>${k !== "none" ? `<button type="button" class="ghost" id="aiTest">Test connection</button>` : ""}</div>`;
     $("#setAI").provider.onchange = (e) => drawAI(e.target.value);
     $("#setAI").onsubmit = async (e) => {
@@ -1013,12 +1013,27 @@ window.delChat = async (id) => { await api("/chat/" + id, { method: "DELETE" });
 window.openChat = async (id) => {
   CHAT_ID = id; $("#chatSide").classList.remove("open");
   const c = await api("/chat/" + id);
-  $("#msgs").innerHTML = c.messages.map((m) => m.role === "user" ? userMsg(m.text) : aiMsg(m.text, m.tools)).join("");
+  $("#msgs").innerHTML = c.messages.map((m) => m.role === "user" ? userMsg(m.text) : aiMsg(m.text, m.tools, m.proposals)).join("");
   scrollDown(true); drawChatList();
 };
 const userMsg = (t) => `<div class="msg user"><div class="bub">${esc(t)}</div></div>`;
-const aiMsg = (t, tools = []) => `<div class="msg ai"><div class="ai-ico">✦</div><div class="ai-body">
-  ${tools.length ? `<div class="chips">${[...new Set(tools)].map((x) => `<span class="chip done">${esc(x)}</span>`).join("")}</div>` : ""}${md(t)}</div></div>`;
+const aiMsg = (t, tools = [], props = []) => `<div class="msg ai"><div class="ai-ico">✦</div><div class="ai-body">
+  ${tools.length ? `<div class="chips">${[...new Set(tools)].map((x) => `<span class="chip done">${esc(x)}</span>`).join("")}</div>` : ""}${md(t)}${props.map(aiProp).join("")}</div></div>`;
+// A change the assistant suggested: nothing is saved until the person approves it here or on Routines.
+const PROP_STATUS = { approved: "Approved", skipped: "Skipped", gone: "No longer available" };
+const aiProp = (p) => `<div class="aiprop" data-pid="${Number(p.id)}"><div class="aiprop-t"><span class="lbl">Suggested change</span>${esc(hideAmt(p.title || ""))}</div>
+  <div class="aiprop-a">${!p.status || p.status === "pending"
+    ? `<button class="sm" onclick="decideChat(this,${Number(p.id)},'approve')">Approve</button><button class="sm ghost" onclick="decideChat(this,${Number(p.id)},'skip')">Skip</button>`
+    : `<span class="chip ${p.status === "approved" ? "good" : "muted"}">${PROP_STATUS[p.status] || esc(p.status)}</span>`}</div></div>`;
+window.decideChat = async (btn, id, decision) => {
+  const box = btn.closest(".aiprop-a"); $$("button", box).forEach((b) => b.disabled = true);
+  try {
+    const r = await api(`/proposals/${id}`, { method: "POST", body: { decision } });
+    box.innerHTML = `<span class="chip ${decision === "approve" ? "good" : "muted"}">${decision === "approve" ? "Approved" : "Skipped"}</span>`;
+    toast(decision === "approve" ? "Saved: " + (r.result || "approved") : "Skipped");
+  } catch (e) { toast(e.message); $$("button", box).forEach((b) => b.disabled = false); }
+  window.refreshNavCount?.();
+};
 function scrollDown(force) { const m = $("#msgs"); if (force || m.scrollHeight - m.scrollTop - m.clientHeight < 160) m.scrollTop = m.scrollHeight; }
 async function send() {
   const ta = $("#prompt"), text = ta.value.trim();
@@ -1031,7 +1046,8 @@ async function send() {
   scrollDown(true);
   STREAMING = true; $("#sendBtn").disabled = true; $("#chatStatus").textContent = "Thinking…";
   const live = $("#live"), chipsEl = $(".chips", live), txtEl = $(".txt", live);
-  let buf = "", changed = false, pending = false;
+  let buf = "", proposed = 0, pending = false;
+  const propsEl = document.createElement("div"); live.querySelector(".ai-body").append(propsEl);
   const render = () => { if (pending) return; pending = true; requestAnimationFrame(() => { txtEl.innerHTML = md(buf); pending = false; scrollDown(); }); };
   try {
     const r = await fetch("/chat/send", { method: "POST", headers: HDRS(), body: JSON.stringify({ chat_id: CHAT_ID, text }) });
@@ -1047,8 +1063,11 @@ async function send() {
         const ev = (block.match(/^event: (.*)$/m) || [])[1], data = JSON.parse((block.match(/^data: (.*)$/m) || [, "{}"])[1]);
         if (ev === "chat") { CHAT_ID = data.id; drawChatList(); }
         else if (ev === "text") { buf += data.t; $("#chatStatus").textContent = "Writing…"; render(); }
-        else if (ev === "tool") { chipsEl.insertAdjacentHTML("beforeend", `<span class="chip run" data-n="${data.name}">${esc(data.label)}</span>`); $("#chatStatus").textContent = data.label + "…"; scrollDown(); }
-        else if (ev === "tool_done") { const c = chipsEl.querySelector(`.chip.run[data-n="${data.name}"]`); if (c) c.className = "chip done"; if (data.changed) changed = true; }
+        else if (ev === "tool") { chipsEl.insertAdjacentHTML("beforeend", `<span class="chip run" data-n="${esc(data.name)}">${esc(data.label)}</span>`); $("#chatStatus").textContent = data.label + "…"; scrollDown(); }
+        else if (ev === "tool_done") {
+          const c = chipsEl.querySelector(`.chip.run[data-n="${CSS.escape(String(data.name))}"]`); if (c) c.className = "chip done";
+          if (data.proposal) { proposed++; propsEl.insertAdjacentHTML("beforeend", aiProp(data.proposal)); scrollDown(); }
+        }
         else if (ev === "error") { txtEl.insertAdjacentHTML("beforeend", `<p class="err-inline">⚠ ${esc(data.message)}</p>`); }
         else if (ev === "done") { $$(".chip.run", chipsEl).forEach((c) => c.className = "chip done"); }
       }
@@ -1058,7 +1077,7 @@ async function send() {
   } finally {
     txtEl.classList.remove("cursor"); if (buf) txtEl.innerHTML = md(buf);
     live.removeAttribute("id"); STREAMING = false; $("#sendBtn").disabled = false; $("#chatStatus").textContent = "";
-    if (changed) toast("Claude updated your data");
+    if (proposed) { toast(proposed === 1 ? "A suggested change is waiting for your approval" : `${proposed} suggested changes are waiting for your approval`); window.refreshNavCount?.(); }
     drawChatList(); scrollDown();
   }
 }

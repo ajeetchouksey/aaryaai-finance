@@ -57,7 +57,7 @@ def make_provider(cfg: dict, secret) -> "BaseProvider | None":
     model = cfg.get("model") or PROVIDERS.get(kind, {}).get("default_model", "")
     if kind == "anthropic":
         k = secret("anthropic_api_key")
-        return AnthropicProvider(k, model, cfg.get("web_search", True)) if k else None
+        return AnthropicProvider(k, model, bool(cfg.get("web_search", False))) if k else None
     if kind == "azure_openai":
         k, ep, dep = secret("azure_openai_api_key"), (cfg.get("endpoint") or "").rstrip("/"), cfg.get("deployment") or model
         if not (k and ep and dep):
@@ -97,7 +97,7 @@ class BaseProvider:
 class AnthropicProvider(BaseProvider):
     name = "anthropic"
 
-    def __init__(self, key: str, model: str, web_search: bool = True):
+    def __init__(self, key: str, model: str, web_search: bool = False):
         import anthropic
         self.client, self.model, self.web_search = anthropic.Anthropic(api_key=key), model, web_search
 
@@ -171,7 +171,7 @@ class OpenAICompatProvider(BaseProvider):
         ot = to_openai_tools(tools)
         if ot:
             body["tools"] = ot
-        text, calls, finish = "", {}, "stop"
+        text, calls = "", {}
         try:
             with httpx.stream("POST", self.url, params=self.params, headers=self.headers, json=body, timeout=120) as r:
                 if r.status_code >= 400:
@@ -200,8 +200,6 @@ class OpenAICompatProvider(BaseProvider):
                                 slot["name"] = fn["name"]
                                 yield Event("tool_start", name=fn["name"])
                             slot["args"] += fn.get("arguments") or ""
-                        if ch.get("finish_reason"):
-                            finish = ch["finish_reason"]
         except Exception as e:  # noqa: BLE001
             yield Event("error", text=_friendly(e))
             return

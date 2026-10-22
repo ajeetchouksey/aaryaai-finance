@@ -359,9 +359,32 @@ class Ctx:
                 result = "deadline added"
             elif t == "add_transaction":
                 row = dict(a["row"])
+                if float(row.get("amount") or 0) <= 0:
+                    raise ValueError("The amount must be more than zero.")
                 row.setdefault("created", datetime.now().isoformat(timespec="seconds"))
                 rid = self.db.upsert("transactions", row)
                 result = f"transaction #{rid} added"
+            elif t == "add_recurring":
+                row = dict(a["row"])
+                if float(row.get("amount") or 0) <= 0:
+                    raise ValueError("The amount must be more than zero.")
+                rid = self.db.upsert("recurring", row)
+                ledger.materialize_recurring(self.db)
+                result = f"repeating entry #{rid} added"
+            elif t == "save_goal":
+                row = dict(a["row"])
+                if row.get("id") and not self.db.get("goals", row["id"]):
+                    raise ValueError("That goal no longer exists.")
+                rid = self.db.upsert("goals", row)
+                result = f"goal #{rid} saved"
+            elif t == "add_account":
+                rid = self.db.upsert("accounts", {k: v for k, v in a["row"].items() if k != "id"})
+                result = f"account #{rid} added"
+            elif t == "set_deadline_status":
+                r = self.set_deadline_status(a["key"], a["status"])
+                if r.get("error"):
+                    raise ValueError("That deadline no longer exists.")
+                result = f"deadline marked {a['status']}"
             else:
                 result = "noted"
         self.db.upsert("proposals", {"id": pid, "status": "approved" if decision == "approve" else "skipped",
