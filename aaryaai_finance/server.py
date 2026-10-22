@@ -42,11 +42,13 @@ CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 
 
 def _check_documents_root(settings: Settings, value) -> None:
     """The documents folder must be a folder of its own: the app scans, opens and moves files inside it."""
-    r = Path(os.path.expandvars(str(value or "documents"))).expanduser()
-    r = (r if r.is_absolute() else settings.data_dir / r).resolve()
-    home = Path.home().resolve()
-    system = {Path(x).resolve() for x in ("/etc", "/usr", "/bin", "/sbin", "/System", "/Library", "/Applications",
-                                          os.environ.get("SystemRoot", r"C:\Windows"), os.environ.get("ProgramFiles", r"C:\Program Files"))}
+    # Plain string normalisation (no filesystem access): this only decides whether the setting is acceptable.
+    norm = lambda p: Path(os.path.normcase(os.path.normpath(os.path.abspath(p))))      # noqa: E731
+    raw = Path(os.path.expandvars(str(value or "documents"))).expanduser()
+    r = norm(raw if raw.is_absolute() else settings.data_dir / raw)
+    home = norm(Path.home())
+    system = {norm(x) for x in ("/etc", "/usr", "/bin", "/sbin", "/System", "/Library", "/Applications",
+                                os.environ.get("SystemRoot", r"C:\Windows"), os.environ.get("ProgramFiles", r"C:\Program Files"))}
     bad = (r.parent == r or r == home or r == home.parent or r in system or any(sp in r.parents for sp in system if sp.parent != sp))
     if bad:
         raise HTTPException(400, f"Choose a folder just for your documents, not {r}. The app reads and moves files inside it.")

@@ -1,4 +1,6 @@
 """The local API must only answer this computer's own browser tab."""
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -210,7 +212,11 @@ def test_opened_documents_cannot_run_in_the_app(setup_client):
     assert setup_client.get("/docs/open?path=../config.yaml").status_code == 404
 
 
-@pytest.mark.parametrize("folder", ["/", "~", "/etc/finance", "/usr"])
+_SYSTEM = [os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "finance"), os.environ.get("ProgramFiles", r"C:\Program Files")] \
+    if os.name == "nt" else ["/etc/finance", "/usr"]
+
+
+@pytest.mark.parametrize("folder", ["/", "~", *_SYSTEM])
 def test_documents_folder_must_be_a_folder_of_its_own(setup_client, folder):
     r = setup_client.post("/config", json={"documents_root": folder})
     assert r.status_code == 400 and "just for your documents" in r.json()["detail"]
