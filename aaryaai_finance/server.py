@@ -30,9 +30,26 @@ COMMON_CURRENCIES = ["EUR", "INR", "USD", "GBP", "CHF", "SGD", "AED", "AUD", "CA
 
 
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+MAX_UPLOAD = 60 * 1024 * 1024                  # one document
+MAX_BODY = MAX_UPLOAD * 4 // 3 + 1024 * 1024   # its base64 text plus the rest of the JSON
+# Opened in the browser tab. Anything else (HTML, SVG, XML…) is downloaded, so a filed document can never run script in the app's origin.
+INLINE_TYPES = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".txt", ".csv"}
+SANDBOX_CSP = "sandbox; default-src 'none'"
 PUBLIC_PATHS = ("/static/",)
 CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
        "font-src 'self'; connect-src 'self'; frame-src 'self' blob:; object-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+
+
+def _check_documents_root(settings: Settings, value) -> None:
+    """The documents folder must be a folder of its own: the app scans, opens and moves files inside it."""
+    r = Path(os.path.expandvars(str(value or "documents"))).expanduser()
+    r = (r if r.is_absolute() else settings.data_dir / r).resolve()
+    home = Path.home().resolve()
+    system = {Path(x).resolve() for x in ("/etc", "/usr", "/bin", "/sbin", "/System", "/Library", "/Applications",
+                                          os.environ.get("SystemRoot", r"C:\Windows"), os.environ.get("ProgramFiles", r"C:\Program Files"))}
+    bad = (r.parent == r or r == home or r == home.parent or r in system or any(sp in r.parents for sp in system if sp.parent != sp))
+    if bad:
+        raise HTTPException(400, f"Choose a folder just for your documents, not {r}. The app reads and moves files inside it.")
 
 
 def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None) -> FastAPI:
@@ -58,6 +75,12 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         elif origin == "null" and request.method not in ("GET", "HEAD"):
             return JSONResponse({"detail": "Blocked: request from an unknown origin."}, status_code=403)
         path = request.url.path
+        try:
+            too_big = int(request.headers.get("content-length") or 0) > MAX_BODY
+        except ValueError:
+            too_big = True
+        if too_big:
+            return JSONResponse({"detail": "That upload is too large (60 MB at most)."}, status_code=413)
         if path != "/" and not path.startswith(PUBLIC_PATHS):
             given = request.headers.get("x-session-token") or request.query_params.get("t")
             if not given or not secrets.compare_digest(given, token):
@@ -68,7 +91,7 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         resp.headers["X-Frame-Options"] = "DENY"
         resp.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         resp.headers["Cross-Origin-Resource-Policy"] = "same-origin"
-        resp.headers["Content-Security-Policy"] = CSP
+        resp.headers.setdefault("Content-Security-Policy", CSP)      # a route may set a stricter one (/docs/open)
         if not path.startswith("/static/"):
             resp.headers["Cache-Control"] = "no-store"
         return resp
@@ -192,6 +215,7 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         cfg["profile"]["about"] = p.get("about", cfg["profile"].get("about", ""))
         cfg["profile"]["answers"] = {**cfg["profile"].get("answers", {}), **(p.get("answers") or {})}
         if p.get("documents_root"):
+            _check_documents_root(s, p["documents_root"])
             cfg["documents_root"] = p["documents_root"]
         if p.get("folders"):
             cfg["folders"] = {**cfg.get("folders", {}), **p["folders"]}
@@ -233,6 +257,8 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
     def put_config(p: dict = Body(...)):
         c = ctx()
         cfg = c.settings.config
+        if "documents_root" in p:
+            _check_documents_root(c.settings, p["documents_root"])
         for k in ("countries", "base_currency", "extra_currencies", "documents_root", "folders"):
             if k in p:
                 cfg[k] = p[k]
@@ -709,7 +735,7 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
 
     @app.post("/rules/test")
     def rules_test(p: dict = Body(...)):
-        data = base64.b64decode(p["data"].split(",")[-1])
+        data = _upload(p)
         a = ctx().rules.analyze(data, Path(p.get("filename") or "file").name)
         a.pop("sha256", None)
         return a
@@ -726,11 +752,7 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
     def docs_analyze(p: dict = Body(...)):
         c = ctx()
         name = Path(p.get("filename") or "document").name
-        try:
-            data = base64.b64decode(p["data"].split(",")[-1])
-        except Exception:  # noqa: BLE001
-            raise HTTPException(400, "Couldn't read the uploaded file.")
-        need(len(data) <= 60 * 1024 * 1024, "File is larger than 60 MB.")
+        data = _upload(p)
         a = c.rules.analyze(data, name)
         if a["confidence"] < 0.6 and a["has_text"]:
             prov = make_provider(c.settings.config["ai"], c.settings.secret)
@@ -741,6 +763,16 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         c.settings.inbox_dir.mkdir(parents=True, exist_ok=True)
         (c.settings.inbox_dir / (a["sha256"] + Path(name).suffix.lower())).write_bytes(data)
         return a
+
+    def _upload(p: dict) -> bytes:
+        """The file inside an upload request (base64, optionally a data: URL), refused before decoding if it is too big."""
+        raw = str(p.get("data") or "").split(",")[-1]
+        need(raw, "No file in the request.")
+        need(len(raw) * 3 // 4 <= MAX_UPLOAD, "File is larger than 60 MB.")
+        try:
+            return base64.b64decode(raw, validate=True)
+        except ValueError:
+            raise HTTPException(400, "Couldn't read the uploaded file.")
 
     def _ai_classify(c: Ctx, prov, data: bytes, name: str) -> dict | None:
         from .rules.engine import extract_text
@@ -810,6 +842,8 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         for r in lib:
             key = (r["path"], r["modified"], r["size"])
             a = state["review"].get(key)
+            if a is None and r["size"] > MAX_UPLOAD:
+                continue                                  # too big to read on every review
             if a is None:
                 a = c.rules.analyze((c.settings.documents_root / r["path"]).read_bytes(), r["name"])
                 a.pop("excerpt", None)
@@ -842,7 +876,11 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         root = ctx().settings.documents_root.resolve()
         tgt = (root / path).resolve()
         need(root in tgt.parents and tgt.is_file(), "Not found", 404)
-        return FileResponse(tgt)
+        inline = tgt.suffix.lower() in INLINE_TYPES
+        if inline:
+            return FileResponse(tgt, filename=tgt.name, content_disposition_type="inline")
+        return FileResponse(tgt, filename=tgt.name, content_disposition_type="attachment", media_type="application/octet-stream",
+                            headers={"Content-Security-Policy": SANDBOX_CSP})
 
     # ======================= invest / learn =======================
     def _prices(p: dict):

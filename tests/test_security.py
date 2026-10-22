@@ -155,3 +155,68 @@ def test_update_check_is_daily_quiet_and_optional(tmp_path):
     assert updates.parse_version("0.10.0") > updates.parse_version("0.9.9")
     same = updates.check(tmp_path / "w.json", fetch=lambda: {"version": __version__}, now=5.0)
     assert same["newer"] is False
+
+
+# ---------------------------------------------------------------- uploads, documents and the documents folder
+@pytest.fixture()
+def setup_client(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path / "ad")); monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "ad"))
+    c = local_client(create_app(tmp_path / "boot"))
+    assert c.post("/setup/apply", json={"data_dir": str(tmp_path / "d"), "countries": ["DE"], "base_currency": "EUR"}).status_code == 200
+    c.docs = tmp_path / "d" / "documents"
+    return c
+
+
+def test_oversized_requests_and_uploads_are_refused(setup_client, monkeypatch):
+    import base64
+    from aaryaai_finance import server as srv
+    monkeypatch.setattr(srv, "MAX_BODY", 2000)
+    r = setup_client.post("/rules/test", json={"filename": "a.txt", "data": "A" * 5000})
+    assert r.status_code == 413 and "too large" in r.json()["detail"]
+    monkeypatch.setattr(srv, "MAX_BODY", 10**9)
+    monkeypatch.setattr(srv, "MAX_UPLOAD", 100)
+    big = base64.b64encode(b"x" * 500).decode()
+    for url in ("/docs/analyze", "/rules/test"):
+        r = setup_client.post(url, json={"filename": "a.txt", "data": big})
+        assert r.status_code == 400 and "60 MB" in r.json()["detail"], url
+    assert setup_client.post("/docs/analyze", json={"filename": "a.txt", "data": "%%%"}).status_code == 400
+
+
+def test_office_files_that_unpack_too_large_are_not_read(monkeypatch):
+    import io
+    import zipfile
+    from aaryaai_finance.rules import engine
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("word/document.xml", "<w>" + "Gehaltsabrechnung " * 2000 + "</w>")
+    assert "Gehaltsabrechnung" in engine.extract_text(buf.getvalue(), "pay.docx")[0]
+    monkeypatch.setattr(engine, "MAX_UNZIPPED", 1000)
+    text, how = engine.extract_text(buf.getvalue(), "pay.docx")
+    assert text == "" and "too large" in how
+
+
+def test_opened_documents_cannot_run_in_the_app(setup_client):
+    setup_client.docs.mkdir(parents=True, exist_ok=True)
+    (setup_client.docs / "page.html").write_text("<script>fetch('/config')</script>")
+    (setup_client.docs / "pic.svg").write_text("<svg onload='alert(1)'/>")
+    (setup_client.docs / "statement.pdf").write_bytes(b"%PDF-1.4\n%%EOF")
+    for name in ("page.html", "pic.svg"):
+        r = setup_client.get(f"/docs/open?path={name}")
+        assert r.status_code == 200 and r.headers["content-disposition"].startswith("attachment"), name
+        assert r.headers["content-type"] == "application/octet-stream" and r.headers["content-security-policy"].startswith("sandbox")
+    r = setup_client.get("/docs/open?path=statement.pdf")
+    assert r.headers["content-disposition"].startswith("inline") and r.headers["content-type"] == "application/pdf"
+    assert "connect-src 'self'" in r.headers["content-security-policy"]
+    assert setup_client.get("/docs/open?path=../config.yaml").status_code == 404
+
+
+@pytest.mark.parametrize("folder", ["/", "~", "/etc/finance", "/usr"])
+def test_documents_folder_must_be_a_folder_of_its_own(setup_client, folder):
+    r = setup_client.post("/config", json={"documents_root": folder})
+    assert r.status_code == 400 and "just for your documents" in r.json()["detail"]
+    assert setup_client.get("/config").json()["documents_root"] == "documents"
+
+
+def test_a_normal_documents_folder_is_accepted(setup_client, tmp_path):
+    r = setup_client.post("/config", json={"documents_root": str(tmp_path / "My finance papers")})
+    assert r.status_code == 200 and r.json()["documents_root"].endswith("My finance papers")

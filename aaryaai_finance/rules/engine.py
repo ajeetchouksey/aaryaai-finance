@@ -47,9 +47,19 @@ DEFAULT_CATEGORIES = ["Salary & payslips", "Tax", "Property", "Bank statements",
 
 
 # ------------------------------------------------------------------ text
+MAX_UNZIPPED = 100 * 1024 * 1024    # .docx / .xlsx are zip files; refuse ones that would unpack to more than this
+
+
+def _zip_too_big(data: bytes) -> bool:
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        return sum(i.file_size for i in z.infolist()) > MAX_UNZIPPED
+
+
 def extract_text(data: bytes, filename: str, max_pages: int = 6) -> tuple[str, str]:
     ext = Path(filename).suffix.lower()
     try:
+        if ext in (".docx", ".xlsx") and _zip_too_big(data):
+            return "", "too large to read (unpacks to over 100 MB)"
         if ext == ".pdf":
             import pdfplumber
             with pdfplumber.open(io.BytesIO(data)) as pdf:
