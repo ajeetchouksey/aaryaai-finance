@@ -6,11 +6,10 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from fastapi.testclient import TestClient  # noqa: E402
 
 from aaryaai_finance.ai.providers import to_openai_messages, to_openai_tools  # noqa: E402
 from aaryaai_finance.core import ledger  # noqa: E402
-from aaryaai_finance.rules.engine import RuleSet, validate_rules_yaml, _render_text  # noqa: E402
+from aaryaai_finance.rules.engine import validate_rules_yaml, _render_text  # noqa: E402
 from aaryaai_finance.server import create_app
 from conftest import local_client  # noqa: E402
 
@@ -84,7 +83,7 @@ def test_document_file_and_review(client, tmp_path):
     txt = "Lohnsteuerbescheinigung für 2024 Bruttoarbeitslohn".encode()
     a = client.post("/docs/analyze", json={"filename": "scan.txt", "data": base64.b64encode(txt).decode()}).json()
     assert a["doc_type"] == "de_lohnsteuerbescheinigung" and a["folder"] == "Germany" and a["filename"] == "Lohnsteuerbescheinigung 2024.txt"
-    r = client.post("/docs/file", json={**a, "folder": "Misfiled"}).json()
+    client.post("/docs/file", json={**a, "folder": "Misfiled"}).json()
     assert (tmp_path / "data" / "documents" / "Misfiled" / "Lohnsteuerbescheinigung 2024.txt").exists()
     rev = client.get("/docs/review").json()
     assert rev["suggestions"][0]["suggested_folder"] == "Germany"

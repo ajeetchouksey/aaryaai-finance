@@ -156,4 +156,4 @@ pytest -m ui
 A failing UI test saves a full-page screenshot in `ui-artifacts/`. CI runs them in a separate job and uploads those screenshots.
 Tests never touch your real settings: `tests/conftest.py` points every settings location (app, Claude Desktop, VS Code) into a temporary folder.
 
-The manual acceptance test (UAT) guide covers the same ground plus what a browser test can't: Claude Desktop answering, VS Code, AI providers.
+The manual [acceptance test (UAT) guide](docs/uat.md) covers the same ground plus what a browser test can't: Claude Desktop answering, VS Code, AI providers.

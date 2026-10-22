@@ -106,10 +106,10 @@ def build(data_dir: Path) -> Path:
               opening_balance=18500, opening_date=_months_ago(7).isoformat(), liquid=1, de_freistellungsauftrag=800, de_capital_income_ytd=140)
     nre = A(name="NRE savings", institution="Sample Bank India", country="IN", currency="INR", type="Savings account",
             opening_balance=240000, opening_date=_months_ago(7).isoformat(), liquid=1, in_account_kind="NRE")
-    depot = A(name="Broker cash", institution="Sample Broker", country="DE", currency="EUR", type="Broker / Depot",
-              opening_balance=300, opening_date=_months_ago(7).isoformat(), liquid=1, de_freistellungsauftrag=200, de_capital_income_ytd=1240)
-    bankb = A(name="Bank B", institution="Sample Bank B", country="DE", currency="EUR", type="Savings account",
-              opening_balance=1500, opening_date=_months_ago(7).isoformat(), liquid=1, de_losses_ytd=320)
+    A(name="Broker cash", institution="Sample Broker", country="DE", currency="EUR", type="Broker / Depot",
+      opening_balance=300, opening_date=_months_ago(7).isoformat(), liquid=1, de_freistellungsauftrag=200, de_capital_income_ytd=1240)
+    A(name="Bank B", institution="Sample Bank B", country="DE", currency="EUR", type="Savings account",
+      opening_balance=1500, opening_date=_months_ago(7).isoformat(), liquid=1, de_losses_ytd=320)
     nro = A(name="NRO savings", institution="Sample Bank India", country="IN", currency="INR", type="Savings account",
             opening_balance=185000, opening_date=_months_ago(7).isoformat(), liquid=1, in_account_kind="NRO")
 
