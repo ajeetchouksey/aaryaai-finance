@@ -10,7 +10,8 @@ import uuid
 from datetime import date
 from typing import Callable, Iterator
 
-from ..core import ledger, planning, trading
+from ..core import ledger
+from . import tools as shared
 from .providers import Final
 
 BASE_SYSTEM = """You are the personal-finance companion inside aaryaai-finance, a local app.
@@ -19,6 +20,7 @@ How to answer:
 - Plain English first, short sentences; define jargon the first time. Lead with the answer or action, then why.
 - Ground answers in the user's data: call get_financial_snapshot / list_deadlines before answering about their situation,
   and use run_calculator / plan_goal for any tax or savings number. Never do tax arithmetic in your head.
+- money_summary answers "what did I spend"; find_documents finds a saved file by name; list_proposals shows what already waits for approval.
 - Use the user's currencies; say which currency each amount is in.
 - If data is missing, say what's missing and where to add it in the app (tab + button).
 - Tax: explain rules for the user's countries (below). Say what is certain vs an estimate. For filings, corrections or
@@ -32,20 +34,8 @@ About the user: {about}
 Countries switched on: {countries}. Base currency: {base}.
 {pack_notes}"""
 
-TOOLS = [
-    {"name": "get_financial_snapshot", "description": "Current position: net worth (base currency), accounts with balances, other assets/debts, holdings, goals, this month's income/spending, trackers (e.g. property purchases), exchange rates.",
-     "input_schema": {"type": "object", "properties": {}}},
-    {"name": "list_deadlines", "description": "Tax & compliance deadlines from country packs, user rules and the user's own items.",
-     "input_schema": {"type": "object", "properties": {"include_done": {"type": "boolean"}}}},
-    {"name": "list_calculators", "description": "Calculators available from the user's country packs, with their input fields.",
-     "input_schema": {"type": "object", "properties": {}}},
-    {"name": "run_calculator", "description": "Run a country-pack calculator (e.g. pack DE, calculator refund). Inputs by field id — call list_calculators first.",
-     "input_schema": {"type": "object", "required": ["pack", "calculator", "inputs"], "properties": {
-         "pack": {"type": "string"}, "calculator": {"type": "string"}, "inputs": {"type": "object"}}}},
-    {"name": "plan_goal", "description": "What-if savings plan: required monthly saving and on-track verdict. Does not save.",
-     "input_schema": {"type": "object", "required": ["name", "target_today", "target_date"], "properties": {
-         "name": {"type": "string"}, "target_today": {"type": "number"}, "currency": {"type": "string"}, "target_date": {"type": "string"},
-         "saved": {"type": "number"}, "monthly": {"type": "number"}, "annual_return": {"type": "number"}, "inflation": {"type": "number"}}}},
+# Changes: each only creates a proposal the user approves. The read tools come from tools.py, shared with the MCP server.
+WRITE_TOOLS = [
     {"name": "save_goal", "description": "Propose a new goal or a change to one (only when asked); the user approves it in the app. Pass id to update.",
      "input_schema": {"type": "object", "required": ["name", "target_today", "target_date"], "properties": {
          "id": {"type": "integer"}, "name": {"type": "string"}, "target_today": {"type": "number"}, "currency": {"type": "string"},
@@ -64,25 +54,12 @@ TOOLS = [
          "liquid": {"type": "boolean"}}}},
     {"name": "update_deadline", "description": "Propose marking a deadline done or open (only when asked); the user approves it in the app. Use the key from list_deadlines.",
      "input_schema": {"type": "object", "required": ["key", "status"], "properties": {"key": {"type": "string"}, "status": {"type": "string", "enum": ["open", "done"]}}}},
-    {"name": "cash_forecast", "description": "12-month cash forecast per currency with lowest points, the user's minimum balances and the funding plan (transfers between currencies). Scenarios: base, salary_late, stage_early, no_estimated, fx_weak.",
-     "input_schema": {"type": "object", "properties": {"scenario": {"type": "string"}}}},
-    {"name": "goal_odds", "description": "Probability of reaching each goal (2,000 simulated markets), saving needed for 85%, monthly surplus split and what-if scenarios.",
-     "input_schema": {"type": "object", "properties": {}}},
-    {"name": "diversification", "description": "Holdings looked through to asset class, country, currency, sector and companies; concentration flags vs the user's rules; target mix and tax-cheapest rebalancing.",
-     "input_schema": {"type": "object", "properties": {}}},
-    {"name": "opportunities", "description": "Tax-aware opportunities from the country packs (allowances, holding periods, deadlines).",
-     "input_schema": {"type": "object", "properties": {}}},
-    {"name": "tax_status", "description": "Tax-year workspace for a country (DE, IN…): documents found/missing, answers, estimate, findings, filing-sheet lines.",
-     "input_schema": {"type": "object", "required": ["country"], "properties": {"country": {"type": "string"}, "year": {"type": "integer"}}}},
-    {"name": "run_backtest", "description": "Backtest a trading rule on past prices (paper only). ticker like VWCE.DE, ^NSEI or DEMO.",
-     "input_schema": {"type": "object", "required": ["ticker"], "properties": {"ticker": {"type": "string"}, "strategy": {"type": "string", "enum": list(trading.STRATEGIES)}, "years": {"type": "integer"}}}},
 ]
+TOOLS = shared.for_chat() + WRITE_TOOLS
 
-LABELS = {"get_financial_snapshot": "Looked at your finances", "list_deadlines": "Checked your deadlines", "list_calculators": "Looked up calculators",
-          "run_calculator": "Ran a calculator", "plan_goal": "Ran a savings plan", "save_goal": "Proposed a goal", "add_transaction": "Proposed an entry",
-          "add_account": "Proposed an account", "update_deadline": "Proposed a deadline change", "run_backtest": "Ran a backtest", "web_search": "Searched the web",
-          "cash_forecast": "Checked the cash forecast", "goal_odds": "Checked your goal odds", "diversification": "Checked your diversification",
-          "opportunities": "Looked for tax opportunities", "tax_status": "Opened your tax workspace"}
+LABELS = {t.name: t.label for t in shared.TOOLS} | {
+    "save_goal": "Proposed a goal", "add_transaction": "Proposed an entry", "add_account": "Proposed an account",
+    "update_deadline": "Proposed a deadline change", "web_search": "Searched the web"}
 
 
 def system_prompt(ctx) -> str:
@@ -99,51 +76,14 @@ class Toolbox:
         self.ctx = ctx
 
     def run(self, name: str, args: dict):
-        fn = getattr(self, "t_" + name, None)
+        t = shared.find(name, "chat")
+        fn = (lambda **a: t.run(self.ctx, **a)) if t else getattr(self, "t_" + name, None)
         if not fn:
             return {"error": f"unknown tool {name}"}
         try:
             return fn(**(args or {}))
         except Exception as e:  # noqa: BLE001
             return {"error": f"{type(e).__name__}: {e}"}
-
-    def t_get_financial_snapshot(self):
-        return self.ctx.snapshot()
-
-    def t_cash_forecast(self, scenario: str = "base"):
-        f = self.ctx.forecast(scenario)
-        return {k: f[k] for k in ("today", "base", "scenario", "floors", "lowest", "plan", "watch", "options", "next90")} | {
-            "month_end": {c: [{"month": r["month"], "end": r["end"], "low": r["low"]} for r in rows] for c, rows in f["series"].items()}}
-
-    def t_goal_odds(self):
-        return self.ctx.goal_odds()
-
-    def t_diversification(self):
-        d = self.ctx.diversify()
-        return {k: d[k] for k in ("base", "total", "classes", "countries", "currencies", "sectors", "companies", "flags", "checks", "targets", "options")}
-
-    def t_opportunities(self):
-        return self.ctx.opportunities()
-
-    def t_tax_status(self, country: str, year: int | None = None):
-        ws = self.ctx.tax_workspace(country.upper(), year)
-        return {k: ws[k] for k in ("title", "year_label", "steps", "documents", "questions", "derived", "checks", "sheet", "estimate")}
-
-    def t_list_deadlines(self, include_done: bool = False):
-        return {"today": date.today().isoformat(), "items": [d for d in self.ctx.calendar() if include_done or d["status"] != "done"]}
-
-    def t_list_calculators(self):
-        return [{"pack": c, "calculator": k["id"], "title": k.get("title"), "inputs": k.get("inputs", [])}
-                for c, p in self.ctx.packs.items() for k in p.get("calculators", [])]
-
-    def t_run_calculator(self, pack, calculator, inputs):
-        return self.ctx.run_calculator(pack, calculator, inputs)
-
-    def t_plan_goal(self, name, target_today, target_date, currency=None, saved=0, monthly=0, annual_return=0.05, inflation=0.02):
-        r = planning.plan_goal(name, float(target_today), date.fromisoformat(target_date), float(saved), float(monthly),
-                               float(annual_return), float(inflation), currency or self.ctx.base)
-        r.pop("path", None)
-        return r
 
     # ---------------- changes: the assistant only proposes them; the user approves each one
     def _propose(self, tool: str, title: str, detail: str, action: dict) -> dict:
@@ -229,12 +169,6 @@ class Toolbox:
         title = f"Mark deadline {'done' if status == 'done' else 'open'}: {d['title']}"
         return self._propose("update_deadline", title, f"due {d.get('due') or 'ongoing'}",
                              {"type": "set_deadline_status", "key": key, "status": status})
-
-    def t_run_backtest(self, ticker, strategy="sma_cross", years=10):
-        p = trading.synthetic_prices(int(years)) if ticker.upper() == "DEMO" else trading.fetch_prices(ticker, f"{date.today().year - int(years)}-01-01")
-        r = trading.backtest(p, strategy)
-        r.pop("series", None)
-        return r
 
 
 def _sse(event: str, data) -> str:

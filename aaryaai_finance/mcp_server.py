@@ -3,7 +3,8 @@
 It runs only when your assistant starts it, as a local process talking over stdin/stdout (the "stdio"
 transport) — there is no network port. It reads the same data folder as the app.
 
-- Read tools: snapshot, cash forecast, deadlines, goal odds, diversification, opportunities, tax status.
+- Read tools (shared with the in-app assistant, see ai/tools.py): snapshot, money summary, cash forecast, deadlines,
+  goal odds, diversification, opportunities, tax status, calculators, savings plan, waiting proposals, documents.
 - Two "propose_" tools can suggest a transaction or a planned item. They change nothing: the proposal waits
   for your approval on the Routines screen. Every call is written to the audit log.
 
@@ -14,28 +15,15 @@ from __future__ import annotations
 import json
 import uuid
 import sys
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 from . import __version__
+from .ai import tools as shared
 
 PROTOCOLS = ["2025-06-18", "2025-03-26", "2024-11-05"]
 
-TOOLS = [
-    {"name": "get_snapshot", "description": "Net worth, accounts with balances, assets and debts, holdings, goals, this month's income and spending, staged purchases, exchange rates.",
-     "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "cash_forecast", "description": "12-month cash forecast per currency: month-end balances, lowest points against the user's floors, and the funding plan (transfers between currencies).",
-     "inputSchema": {"type": "object", "properties": {"scenario": {"type": "string", "enum": ["base", "salary_late", "stage_early", "no_estimated", "fx_weak"]}}}},
-    {"name": "list_deadlines", "description": "Open tax and compliance deadlines in the next N days (default 60).",
-     "inputSchema": {"type": "object", "properties": {"days": {"type": "integer"}}}},
-    {"name": "goal_odds", "description": "Each goal's probability of success from 2,000 simulated markets, the saving per month for 85%, and what-if scenarios.",
-     "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "diversification", "description": "What the user owns by asset class, country, currency and sector (looking inside index funds), concentration flags and the user's own rules.",
-     "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "opportunities", "description": "Tax-aware opportunities from the user's country packs: allowances, holding periods, deadlines. Facts, not buy/sell advice.",
-     "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "tax_status", "description": "Tax-year workspace status for a country: documents found/missing, answers, estimate, findings and filing-sheet lines.",
-     "inputSchema": {"type": "object", "properties": {"country": {"type": "string", "description": "2-letter code, e.g. DE or IN"}, "year": {"type": "integer"}}, "required": ["country"]}},
+TOOLS = shared.for_mcp() + [
     {"name": "propose_transaction", "description": "Suggest a transaction. Nothing is saved until the user approves it in the app (Routines → Proposals).",
      "inputSchema": {"type": "object", "required": ["account", "kind", "amount"], "properties": {
          "account": {"type": "string", "description": "account name or id"}, "kind": {"type": "string", "enum": ["income", "expense"]},
@@ -65,25 +53,9 @@ class Server:
 
     def call(self, name: str, a: dict):
         c = self.ctx
-        if name == "get_snapshot":
-            return c.snapshot()
-        if name == "cash_forecast":
-            f = c.forecast(a.get("scenario") or "base")
-            return {k: f[k] for k in ("today", "base", "scenario", "months", "floors", "lowest", "plan", "watch", "options", "next90")} | {
-                "month_end": {ccy: [{"month": r["month"], "end": r["end"], "low": r["low"]} for r in rows] for ccy, rows in f["series"].items()}}
-        if name == "list_deadlines":
-            until = (date.today() + timedelta(days=int(a.get("days") or 60))).isoformat()
-            return [d for d in c.calendar() if d["status"] == "open" and d["due"] and d["due"] <= until]
-        if name == "goal_odds":
-            return c.goal_odds()
-        if name == "diversification":
-            d = c.diversify()
-            return {k: d[k] for k in ("base", "total", "classes", "countries", "currencies", "sectors", "companies", "flags", "checks", "targets", "options")}
-        if name == "opportunities":
-            return c.opportunities()
-        if name == "tax_status":
-            ws = c.tax_workspace(str(a["country"]).upper(), a.get("year"))
-            return {k: ws[k] for k in ("title", "year_label", "steps", "documents", "questions", "derived", "checks", "sheet", "estimate")}
+        t = shared.find(name, "mcp")
+        if t:
+            return t.run(c, **a)
         if name in ("propose_transaction", "propose_planned_item"):
             acc = self._account(a["account"])
             amt = float(a["amount"])

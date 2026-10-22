@@ -10,7 +10,8 @@ aaryaai finance includes an MCP server, so an AI assistant on your computer can 
 
 - It runs **only when your assistant starts it**, as a local process talking over stdin/stdout. It opens no network port.
 - It reads the same data folder as the app.
-- **Read tools:** `get_snapshot`, `cash_forecast`, `list_deadlines`, `goal_odds`, `diversification`, `opportunities`, `tax_status`.
+- **Read tools:** `get_snapshot`, `money_summary`, `cash_forecast`, `list_deadlines`, `goal_odds`, `diversification`, `opportunities`, `tax_status`, `list_calculators`, `run_calculator`, `plan_goal`, `list_proposals`, `find_documents`. They are the same tools the in-app assistant uses, so both give the same numbers.
+- **`find_documents`** returns file names, folders and categories only, never what is inside a file.
 - **Suggest tools:** `propose_transaction` and `propose_planned_item`. They change nothing: the suggestion waits on the Routines screen until you approve it.
 - Every call is written to the audit log (Routines → Audit log).
 
