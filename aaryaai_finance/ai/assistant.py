@@ -6,6 +6,7 @@ Tools read the app's own database and run the same deterministic calculators the
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import date
 from typing import Callable, Iterator
 
@@ -24,7 +25,8 @@ How to answer:
 - Tax: explain rules for the user's countries (below). Say what is certain vs an estimate. For filings, corrections or
   penalties, recommend confirming with a local tax adviser — once, briefly.
 - Investing: explain risk honestly; never promise returns; don't recommend individual securities. You are not a licensed adviser.
-- Only change data (save_goal, add_account, add_transaction, update_deadline) when the user asks. Confirm changes in one line.
+- Only suggest changes (save_goal, add_account, add_transaction, update_deadline) when the user asks. These tools never save anything:
+  each creates a proposal the user approves with a button under your reply. Say in one line what you proposed and that it waits for their approval.
 
 Today is {today}.
 About the user: {about}
@@ -45,23 +47,23 @@ TOOLS = [
      "input_schema": {"type": "object", "required": ["name", "target_today", "target_date"], "properties": {
          "name": {"type": "string"}, "target_today": {"type": "number"}, "currency": {"type": "string"}, "target_date": {"type": "string"},
          "saved": {"type": "number"}, "monthly": {"type": "number"}, "annual_return": {"type": "number"}, "inflation": {"type": "number"}}}},
-    {"name": "save_goal", "description": "Create or update a goal (only when asked). Pass id to update.",
+    {"name": "save_goal", "description": "Propose a new goal or a change to one (only when asked); the user approves it in the app. Pass id to update.",
      "input_schema": {"type": "object", "required": ["name", "target_today", "target_date"], "properties": {
          "id": {"type": "integer"}, "name": {"type": "string"}, "target_today": {"type": "number"}, "currency": {"type": "string"},
          "target_date": {"type": "string"}, "saved": {"type": "number"}, "monthly": {"type": "number"}, "annual_return": {"type": "number"},
          "inflation": {"type": "number"}, "priority": {"type": "integer"}, "note": {"type": "string"}}}},
-    {"name": "add_transaction", "description": "Log income, an expense or a transfer in one of the user's accounts (only when asked). Amount in the account's currency; optional frequency makes it repeat.",
+    {"name": "add_transaction", "description": "Propose income, an expense or a transfer in one of the user's accounts (only when asked); the user approves it in the app. Amount in the account's currency; optional frequency makes it repeat.",
      "input_schema": {"type": "object", "required": ["kind", "account_id", "amount"], "properties": {
          "kind": {"type": "string", "enum": ["income", "expense", "transfer"]}, "account_id": {"type": "integer"}, "amount": {"type": "number"},
          "category": {"type": "string"}, "date": {"type": "string"}, "note": {"type": "string"}, "to_account_id": {"type": "integer"},
          "to_amount": {"type": "number"}, "frequency": {"type": "string", "enum": ["daily", "weekly", "monthly", "quarterly", "yearly"]},
          "end_date": {"type": "string"}}}},
-    {"name": "add_account", "description": "Add or update a bank/savings/loan account (only when asked).",
+    {"name": "add_account", "description": "Propose a new bank/savings/loan account (only when asked); the user approves it in the app. Existing accounts can't be changed here.",
      "input_schema": {"type": "object", "required": ["name", "currency"], "properties": {
-         "id": {"type": "integer"}, "name": {"type": "string"}, "institution": {"type": "string"}, "country": {"type": "string"},
+         "name": {"type": "string"}, "institution": {"type": "string"}, "country": {"type": "string"},
          "currency": {"type": "string"}, "type": {"type": "string"}, "opening_balance": {"type": "number"}, "opening_date": {"type": "string"},
          "liquid": {"type": "boolean"}}}},
-    {"name": "update_deadline", "description": "Mark a deadline done or open (only when asked). Use the key from list_deadlines.",
+    {"name": "update_deadline", "description": "Propose marking a deadline done or open (only when asked); the user approves it in the app. Use the key from list_deadlines.",
      "input_schema": {"type": "object", "required": ["key", "status"], "properties": {"key": {"type": "string"}, "status": {"type": "string", "enum": ["open", "done"]}}}},
     {"name": "cash_forecast", "description": "12-month cash forecast per currency with lowest points, the user's minimum balances and the funding plan (transfers between currencies). Scenarios: base, salary_late, stage_early, no_estimated, fx_weak.",
      "input_schema": {"type": "object", "properties": {"scenario": {"type": "string"}}}},
@@ -78,11 +80,10 @@ TOOLS = [
 ]
 
 LABELS = {"get_financial_snapshot": "Looked at your finances", "list_deadlines": "Checked your deadlines", "list_calculators": "Looked up calculators",
-          "run_calculator": "Ran a calculator", "plan_goal": "Ran a savings plan", "save_goal": "Saved a goal", "add_transaction": "Logged an entry",
-          "add_account": "Updated an account", "update_deadline": "Updated a deadline", "run_backtest": "Ran a backtest", "web_search": "Searched the web",
+          "run_calculator": "Ran a calculator", "plan_goal": "Ran a savings plan", "save_goal": "Proposed a goal", "add_transaction": "Proposed an entry",
+          "add_account": "Proposed an account", "update_deadline": "Proposed a deadline change", "run_backtest": "Ran a backtest", "web_search": "Searched the web",
           "cash_forecast": "Checked the cash forecast", "goal_odds": "Checked your goal odds", "diversification": "Checked your diversification",
           "opportunities": "Looked for tax opportunities", "tax_status": "Opened your tax workspace"}
-CHANGES = {"save_goal", "add_transaction", "add_account", "update_deadline"}
 
 
 def system_prompt(ctx) -> str:
@@ -145,44 +146,90 @@ class Toolbox:
         r.pop("path", None)
         return r
 
+    # ---------------- changes: the assistant only proposes them; the user approves each one
+    def _propose(self, tool: str, title: str, detail: str, action: dict) -> dict:
+        pid = self.ctx.propose(f"ai:{tool}:{uuid.uuid4().hex[:12]}", "AI assistant", title, detail, "suggested in chat", action)
+        self.ctx.audit("AI assistant", f"Proposed: {title}", detail)
+        return {"proposal_id": pid, "title": title,
+                "status": "waiting for the user's approval: an Approve button appears under your reply (also on Routines). Nothing is saved until they approve."}
+
     def t_save_goal(self, **g):
-        g.setdefault("currency", self.ctx.base); g.setdefault("annual_return", 0.05); g.setdefault("inflation", 0.02)
-        g.setdefault("saved", 0); g.setdefault("monthly", 0); g.setdefault("priority", 2)
+        g = {k: v for k, v in g.items() if v is not None}
+        old = None
         if g.get("id"):
             old = next((x for x in self.ctx.db.list("goals") if x["id"] == g["id"]), None)
-            if old:
-                g = old | {k: v for k, v in g.items() if v is not None}
-        return {"saved_goal_id": self.ctx.db.upsert("goals", g)}
+            if not old:
+                return {"error": f"no goal #{g['id']}; call get_financial_snapshot for ids"}
+            g = {k: v for k, v in old.items() if k not in ("extra",)} | g
+        g.setdefault("currency", self.ctx.base); g.setdefault("annual_return", 0.05); g.setdefault("inflation", 0.02)
+        g.setdefault("saved", 0); g.setdefault("monthly", 0); g.setdefault("priority", 2)
+        if float(g.get("target_today") or 0) <= 0:
+            return {"error": "target_today must be more than zero"}
+        date.fromisoformat(str(g["target_date"]))
+        verb = "Update goal" if old else "New goal"
+        title = f"{verb}: {g['name']}, {float(g['target_today']):,.0f} {g['currency']} by {g['target_date']}"
+        detail = f"saving {float(g['monthly']):,.0f} {g['currency']} a month, {float(g['saved']):,.0f} saved so far"
+        return self._propose("save_goal", title, detail, {"type": "save_goal", "row": g})
 
     def t_add_account(self, **a):
-        a.setdefault("country", next((c for c, p in self.ctx.packs.items() if p.get("currency") == a.get("currency")), ""))
+        if a.get("id"):
+            return {"error": "the assistant can add new accounts but not change existing ones; the user can edit them in Money"}
+        ccy = str(a.get("currency") or "").upper()
+        if len(ccy) != 3 or not ccy.isalpha():
+            return {"error": "currency must be a 3-letter code such as EUR or INR"}
+        a["currency"] = ccy
+        a.setdefault("country", next((c for c, p in self.ctx.packs.items() if p.get("currency") == ccy), ""))
         a["liquid"] = 1 if a.get("liquid", True) else 0
         a.setdefault("in_networth", 1); a.setdefault("opening_balance", 0); a.setdefault("opening_date", date.today().isoformat())
         a.setdefault("type", "Current account")
-        return {"saved_account_id": self.ctx.db.upsert("accounts", a)}
+        date.fromisoformat(str(a["opening_date"]))
+        title = f"New account: {a['name']} ({ccy})"
+        detail = f"{a['type']}, opening balance {float(a['opening_balance']):,.2f} {ccy} on {a['opening_date']}"
+        return self._propose("add_account", title, detail, {"type": "add_account", "row": a})
 
     def t_add_transaction(self, kind, account_id, amount, category=None, date=None, note=None, to_account_id=None, to_amount=None,
                           frequency=None, end_date=None):
         from datetime import date as _d
         accts = {a["id"]: a for a in self.ctx.db.list("accounts")}
         if account_id not in accts:
-            return {"error": "unknown account_id — call get_financial_snapshot for ids"}
+            return {"error": "unknown account_id: call get_financial_snapshot for ids"}
+        if kind not in ("income", "expense", "transfer"):
+            return {"error": "kind must be income, expense or transfer"}
+        amount = float(amount)
+        if amount <= 0:
+            return {"error": "amount must be more than zero"}
+        acc = accts[account_id]
         if kind == "transfer":
-            if to_account_id not in accts:
-                return {"error": "transfer needs to_account_id"}
+            if to_account_id not in accts or to_account_id == account_id:
+                return {"error": "a transfer needs a different to_account_id"}
             if to_amount is None:
-                to_amount = round(ledger.to_ccy(amount, accts[account_id]["currency"], accts[to_account_id]["currency"], self.ctx.rates), 2)
-        row = {"kind": kind, "account_id": account_id, "amount": amount, "category": category, "note": note,
+                to_amount = round(ledger.to_ccy(amount, acc["currency"], accts[to_account_id]["currency"], self.ctx.rates), 2)
+        row = {"kind": kind, "account_id": account_id, "amount": amount, "category": category or "", "note": note or "",
                "to_account_id": to_account_id if kind == "transfer" else None, "to_amount": to_amount if kind == "transfer" else None}
         when = date or _d.today().isoformat()
+        _d.fromisoformat(when)
+        what = f"{kind.title()} {amount:,.2f} {acc['currency']}" + (f" to {accts[to_account_id]['name']}" if kind == "transfer" else "")
+        detail = " · ".join(x for x in (category, note) if x)
         if frequency:
-            rid = self.ctx.db.upsert("recurring", {**row, "frequency": frequency, "start_date": when, "end_date": end_date, "active": 1})
-            ledger.materialize_recurring(self.ctx.db)
-            return {"saved_recurring_id": rid, "currency": accts[account_id]["currency"]}
-        return {"saved_transaction_id": self.ctx.db.upsert("transactions", {**row, "date": when}), "currency": accts[account_id]["currency"]}
+            if frequency not in ("daily", "weekly", "monthly", "quarterly", "yearly"):
+                return {"error": "frequency must be daily, weekly, monthly, quarterly or yearly"}
+            if end_date:
+                _d.fromisoformat(end_date)
+            title = f"Repeating {what} {frequency} from {when} ({acc['name']})"
+            return self._propose("add_transaction", title, detail, {"type": "add_recurring", "row": {
+                **row, "frequency": frequency, "start_date": when, "end_date": end_date, "active": 1}})
+        title = f"{what} on {when} ({acc['name']})"
+        return self._propose("add_transaction", title, detail, {"type": "add_transaction", "row": {**row, "date": when}})
 
     def t_update_deadline(self, key, status):
-        return self.ctx.set_deadline_status(key, status)
+        if status not in ("open", "done"):
+            return {"error": "status must be open or done"}
+        d = next((x for x in self.ctx.calendar() if x["key"] == key), None)
+        if not d:
+            return {"error": "no such deadline: use a key from list_deadlines"}
+        title = f"Mark deadline {'done' if status == 'done' else 'open'}: {d['title']}"
+        return self._propose("update_deadline", title, f"due {d.get('due') or 'ongoing'}",
+                             {"type": "set_deadline_status", "key": key, "status": status})
 
     def t_run_backtest(self, ticker, strategy="sma_cross", years=10):
         p = trading.synthetic_prices(int(years)) if ticker.upper() == "DEMO" else trading.fetch_prices(ticker, f"{date.today().year - int(years)}-01-01")
@@ -246,7 +293,8 @@ def chat_stream(provider, ctx, history: list, on_message: Callable[[dict], None]
                 if isinstance(out, dict) and "error" in out:
                     res["is_error"] = True
                 results.append(res)
-                yield _sse("tool_done", {"name": b["name"], "label": LABELS.get(b["name"], b["name"]), "changed": b["name"] in CHANGES})
+                prop = {"id": out["proposal_id"], "title": out.get("title", "")} if isinstance(out, dict) and out.get("proposal_id") else None
+                yield _sse("tool_done", {"name": b["name"], "label": LABELS.get(b["name"], b["name"]), "proposal": prop})
         umsg = {"role": "user", "content": results}
         history.append(umsg)
         on_message(umsg)
@@ -260,6 +308,8 @@ def display_messages(history: list) -> list:
         if m["role"] == "user":
             if isinstance(m["content"], str):
                 out.append({"role": "user", "text": m["content"]})
+            elif out and out[-1]["role"] == "assistant":
+                out[-1]["proposals"] += _proposals_in(m["content"])
             continue
         text = "".join(b.get("text", "") for b in m["content"] if b.get("type") == "text")
         tools = [LABELS.get(b["name"], b["name"]) for b in m["content"] if b.get("type") in ("tool_use", "server_tool_use")]
@@ -267,5 +317,20 @@ def display_messages(history: list) -> list:
             out[-1]["text"] += ("\n\n" if out[-1]["text"] and text else "") + text
             out[-1]["tools"] += tools
         else:
-            out.append({"role": "assistant", "text": text, "tools": tools})
+            out.append({"role": "assistant", "text": text, "tools": tools, "proposals": []})
     return out
+
+
+def _proposals_in(blocks: list) -> list:
+    """Proposals the assistant created, read back from the tool results stored in the chat."""
+    found = []
+    for b in blocks:
+        if b.get("type") != "tool_result" or b.get("is_error"):
+            continue
+        try:
+            r = json.loads(b.get("content") or "{}")
+        except (TypeError, ValueError):
+            continue
+        if isinstance(r, dict) and r.get("proposal_id"):
+            found.append({"id": r["proposal_id"], "title": r.get("title", "")})
+    return found

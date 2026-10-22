@@ -35,7 +35,7 @@ DEFAULT_CONFIG: dict = {
     "folders": {},              # e.g. {"DE": "Germany", "IN": "India", "inbox": "_Inbox"}
     "fx": {"source": "ecb", "manual_rates": {}},
     "ai": {"provider": "none", "model": "", "endpoint": "", "deployment": "", "api_version": "2024-10-21",
-           "web_search": True},
+           "web_search": False},   # opt-in: web pages are untrusted text in the assistant's context
     "updates": {"check": True},  # once a day, fetch the public latest.json; never installs anything by itself
 }
 
