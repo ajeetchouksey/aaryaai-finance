@@ -445,7 +445,8 @@ class RuleSet:
                 continue
             seen.add(r.get("id"))
             self.document_rules.append(r)
-        pack_dls = [{**r, "country": code, "_source": f"{p.get('name', code)} pack"} for code, p in packs.items() for r in p.get("deadlines", []) or []]
+        pack_dls = [{**r, "country": code, "_source": f"{p.get('name', code)} pack", "_roll": p.get("due_roll")}
+                    for code, p in packs.items() for r in p.get("deadlines", []) or []]
         seen, self.deadline_rules = set(), []
         for r in user_dls + pack_dls:
             if r.get("id") in seen:
@@ -597,14 +598,19 @@ class RuleSet:
                     continue
                 seen.add(d)
                 dd = date.fromisoformat(d)
+                if r.get("_roll") == "next_weekday" and dd.weekday() >= 5:   # Saturday/Sunday -> Monday (e.g. § 108 AO)
+                    dd += timedelta(days=7 - dd.weekday())
                 if today - timedelta(days=overdue_days) <= dd <= today + timedelta(days=horizon_days):
-                    out.append(self._dl(r, d, ty))
+                    out.append(self._dl(r, dd.isoformat(), ty, key_due=d))
         return sorted(out, key=lambda x: (x["due"] is None, x["due"] or ""))
 
-    def _dl(self, r: dict, due: str | None, ty: int | None) -> dict:
+    def _dl(self, r: dict, due: str | None, ty: int | None, key_due: str | None = None) -> dict:
         ty = ty or date.today().year
-        return {"key": f"{r['id']}:{due or 'ongoing'}", "rule_id": r["id"], "due": due, "country": r.get("country", ""),
-                "title": _render_text(r.get("title", r["id"]), ty), "detail": _render_text(r.get("detail", ""), ty),
+        moved = bool(key_due and key_due != due)            # the key keeps the rule's own date, so ticks survive the move
+        return {"key": f"{r['id']}:{key_due or due or 'ongoing'}", "rule_id": r["id"], "due": due, "country": r.get("country", ""),
+                "moved_from": key_due if moved else None,
+                "title": _render_text(r.get("title", r["id"]), ty),
+                "detail": _render_text(r.get("detail", ""), ty) + (f" (Moved from {key_due}, which is a weekend.)" if moved else ""),
                 "severity": r.get("severity", "normal"), "source": r.get("source", r.get("_source", ""))}
 
 

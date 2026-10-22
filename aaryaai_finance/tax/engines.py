@@ -104,7 +104,7 @@ def de_refund(p, i, ccy):
     zve = max(gross - wk - _n(i.get("vorsorge")) - _n(i.get("other")), 0)
     est = 2 * de_income_tax(zve / 2, tariff) if joint else de_income_tax(zve, tariff)
     free = _n(_for_year(p.get("soli_freigrenze", {}), year, "Soli threshold")) * (2 if joint else 1)
-    soli = 0.0 if est <= free else round(min(0.055 * est, 0.119 * (est - free)), 2)
+    soli = 0.0 if est <= free else round(min(_n(p.get("soli_rate", 0.055)) * est, _n(p.get("soli_zone_rate", 0.119)) * (est - free)), 2)
     kist = round(est * _n(p.get("church_rate", 0.09)), 2) if church else 0.0
     total = est + soli + kist
     withheld = _n(i.get("lohnsteuer")) + _n(i.get("soli_paid"))
@@ -176,7 +176,8 @@ def in_regimes(p, i, ccy):
     expl += "Your deductions don't beat the new regime's lower rates." if better == "new" else "Your deductions outweigh the new regime's lower rates."
     return {"headline": f"{better.title()} regime", "headline_label": f"saves {fmt(saving, ccy)}", "tone": "good",
             "table": {"columns": ["", "New", "Old"], "rows": [[l, fmt(n[k], ccy), fmt(o[k], ccy)] for l, k in rows]},
-            "rows": [], "explanation": expl,
+            "rows": [["Rates for financial year", str(p["fy_label"])]] if p.get("fy_label") else [],
+            "explanation": expl + (f" Slabs and rates are those for FY {p['fy_label']}." if p.get("fy_label") else ""),
             "data": {"new_total": n["total"], "old_total": o["total"], "best_total": min(n["total"], o["total"]), "better_new": better == "new",
                      "saving": saving}}
 
