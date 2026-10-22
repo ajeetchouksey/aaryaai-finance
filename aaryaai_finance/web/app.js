@@ -98,8 +98,10 @@ markTheme();
 window.setTheme = (m) => { try { localStorage.setItem("fm-theme", m); } catch (e) { } applyTheme(); };
 document.querySelectorAll("#themeSeg [data-theme-mode]").forEach((b) => b.addEventListener("click", () => setTheme(b.dataset.themeMode)));
 matchMedia("(prefers-color-scheme: light)").addEventListener?.("change", () => { if (themeMode() === "system") applyTheme(); });
-// category colours stay neutral so blue/red always mean EUR/INR
-const palette = () => ["#5b4bd6", "#fbbf24", "#34d399", "#f472b6", "#fb923c", "#2dd4bf", "#c4b5fd", "#64748b"];
+// Category colours are theme tokens (--c-* in style.css), read when a chart draws so they follow light and dark.
+// The order is checked for colour-blind separation of neighbours; sky and lilac are left out so blue/lilac keep meaning EUR/INR.
+const tone = (n) => css("--c-" + n);
+const palette = () => ["indigo", "gold", "green", "orange", "pink", "lime", "lavender", "teal"].map(tone);
 const charts = {};
 function chart(id, cfg, a11y = {}) {
   if (!window.Chart) return;
@@ -546,7 +548,7 @@ function journeyChart(id, g) {
   const last = pts[pts.length - 1], proj = [last, ...g.projection.map((p) => ({ x: +new Date(p.date), y: p.cumulative, l: p.label }))];
   const end = +new Date(g.possession_date || proj[proj.length - 1].x), col = css("--lilac"), today = +new Date(new Date().toDateString());
   chart(id, { type: "line", data: { datasets: [
-      { label: "Paid", data: pts, stepped: "before", borderColor: col, borderWidth: 2.5, pointRadius: 3.5, pointBackgroundColor: col, fill: true, backgroundColor: (x) => areaGradient(x, "#a99bff") },
+      { label: "Paid", data: pts, stepped: "before", borderColor: col, borderWidth: 2.5, pointRadius: 3.5, pointBackgroundColor: col, fill: true, backgroundColor: (x) => areaGradient(x, col) },
       { label: "Still to come (estimate)", data: proj, stepped: "before", borderColor: col, borderDash: [6, 5], borderWidth: 2, pointRadius: 3, pointBackgroundColor: css("--paper"), pointBorderColor: col },
       { label: "Total price", data: [{ x: pts[0].x, y: g.price }, { x: end, y: g.price }], borderColor: "rgba(148,163,184,.45)", borderDash: [2, 4], borderWidth: 1, pointRadius: 0 }] },
     options: { parsing: false, interaction: { mode: "nearest", intersect: false },
@@ -567,7 +569,7 @@ function drawOutlook(hist, nw, savings) {
   const col = css("--eur");
   chart("chHist", { type: "line", data: { labels, datasets: [
       { label: "So far", data: past, borderColor: col, borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: col, tension: .3 },
-      { label: "Outlook", data: proj, borderColor: col, borderDash: [6, 5], borderWidth: 2, pointRadius: 0, fill: true, backgroundColor: (c) => areaGradient(c, "#38bdf8"), tension: .3 }] },
+      { label: "Outlook", data: proj, borderColor: col, borderDash: [6, 5], borderWidth: 2, pointRadius: 0, fill: true, backgroundColor: (c) => areaGradient(c, col), tension: .3 }] },
     options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${money(c.raw)}` } } },
       scales: { y: { ticks: { maxTicksLimit: 5, callback: (v) => compact(v) } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 7 } } } } }, { fmt: (v) => money(v, BASE(), 0) });
   $("#outlookNote").textContent = savings > 0 ? `Saving ${money(savings)} a month adds about ${money(savings * 12)} in a year — reaching ≈ ${money(nw + savings * 12)} by ${labels[labels.length - 1]}, before investment growth or currency moves.`
@@ -709,8 +711,8 @@ function drawRule(cf, exp) {
   if (!cf.income) { $("#rule").innerHTML = `<div class="empty">Set your take-home pay in Settings to see the check.</div>`; return; }
   const wants = exp.filter((e) => WANTS.includes(e.category)).reduce((a, e) => a + e.amount, 0);
   const needs = cf.spend - wants, save = Math.max(cf.savings, 0);
-  const rows = [["Needs", "rent, food, childcare, insurance, family support", needs, .5, "#5b4bd6", "under"],
-                ["Wants", "eating out, shopping, travel, subscriptions", wants, .3, "#f472b6", "under"],
+  const rows = [["Needs", "rent, food, childcare, insurance, family support", needs, .5, tone("indigo"), "under"],
+                ["Wants", "eating out, shopping, travel, subscriptions", wants, .3, tone("pink"), "under"],
                 ["Savings", "what's left each month", save, .2, css("--good"), "over"]];
   $("#rule").innerHTML = `<div class="rule">${rows.map(([n, sub, v, t, c, dir]) => {
     const f = v / cf.income, ok = dir === "under" ? f <= t : f >= t;
@@ -1263,8 +1265,8 @@ loaders.money = async () => {
   // charts
   $("#trendSub").textContent = `last 6 ${MONEY.period}s · ${c}`;
   chart("chTrend", { type: "bar", data: { labels: sum.trend.map((t) => t.label), datasets: [
-      { label: "In", data: sum.trend.map((t) => t.income), backgroundColor: "#34d399", borderRadius: 6, maxBarThickness: 26 },
-      { label: "Out", data: sum.trend.map((t) => t.expense), backgroundColor: "#fb7185", borderRadius: 6, maxBarThickness: 26 }] },
+      { label: "In", data: sum.trend.map((t) => t.income), backgroundColor: css("--good"), borderRadius: 6, maxBarThickness: 26 },
+      { label: "Out", data: sum.trend.map((t) => t.expense), backgroundColor: css("--bad"), borderRadius: 6, maxBarThickness: 26 }] },
     options: { plugins: { legend: { position: "bottom", labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (x) => ` ${x.dataset.label}: ${fmtC(x.raw, c)}` } } },
       scales: { x: { grid: { display: false } }, y: { ticks: { maxTicksLimit: 5, callback: (v) => compact(v, c) } } } } }, { fmt: (v) => fmtC(v, c) });
   const cats = Object.entries(sum.by_category);
@@ -1405,8 +1407,9 @@ window.prefillTx = async ({ amount, date, note, category, currency, doc }) => {
 
 // ---------------- DOCUMENTS ----------------
 const DOCS = { meta: null, lib: [], cat: "", q: "" };
-const CAT_COLOR = { "Salary & payslips": "#34d399", "Tax": "#38bdf8", "Tax — Germany": "#38bdf8", "Tax — India": "#a99bff", "Property": "#5b4bd6", "Bank statements": "#fbbf24",
-  "Investments": "#2dd4bf", "Insurance": "#f472b6", "Receipts & bills": "#fb923c", "Social security & pension": "#94a3b8", "Employment": "#c4b5fd", "Career": "#e879f9", "Other": "#64748b" };
+const CAT_COLOR = { "Salary & payslips": "green", "Tax": "sky", "Tax — Germany": "sky", "Tax — India": "lilac", "Property": "indigo", "Bank statements": "gold",
+  "Investments": "teal", "Insurance": "pink", "Receipts & bills": "orange", "Social security & pension": "grey", "Employment": "lavender", "Career": "fuchsia", "Other": "slate" };
+const catColor = (k) => tone(CAT_COLOR[k] || "slate");
 loaders.documents = async () => {
   DOCS.meta = await api("/docs/meta");
   $("#rootChip").textContent = "📁 " + DOCS.meta.root; $("#rootChip").title = DOCS.meta.root;
@@ -1416,14 +1419,14 @@ loaders.documents = async () => {
 function drawLibrary() {
   const counts = {}; DOCS.lib.forEach((d) => counts[d.category] = (counts[d.category] || 0) + 1);
   $("#libCats").innerHTML = [["", `All (${DOCS.lib.length})`], ...Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => [k, `${k} (${n})`])]
-    .map(([k, l]) => `<button class="${DOCS.cat === k ? "on" : ""}" data-k="${esc(k)}">${k ? `<span class="catdot" style="background:${CAT_COLOR[k] || "#64748b"}"></span>` : ""}${esc(l)}</button>`).join("");
+    .map(([k, l]) => `<button class="${DOCS.cat === k ? "on" : ""}" data-k="${esc(k)}">${k ? `<span class="catdot" style="background:${catColor(k)}"></span>` : ""}${esc(l)}</button>`).join("");
   $$("#libCats button").forEach((b) => b.onclick = () => { DOCS.cat = b.dataset.k; drawLibrary(); });
   const q = DOCS.q.toLowerCase();
   const rows = DOCS.lib.filter((d) => (!DOCS.cat || d.category === DOCS.cat) && (!q || d.path.toLowerCase().includes(q)));
   $("#libCount").textContent = `${rows.length} file${rows.length === 1 ? "" : "s"}`;
   $("#libTbl").innerHTML = `<thead><tr><th>File</th><th>Category</th><th>Folder</th><th class="n">Size</th></tr></thead><tbody>` + rows.slice(0, 300).map((d) => `<tr>
     <td><a href="${withToken("/docs/open?path=" + encodeURIComponent(d.path))}" target="_blank" rel="noopener" style="color:var(--ink)">${esc(d.name)}</a>${d.logged ? ` <span class="rep">filed here</span>` : ""}</td>
-    <td data-l="Category"><span class="catdot" style="background:${CAT_COLOR[d.category] || "#64748b"}"></span>${esc(d.category)}</td>
+    <td data-l="Category"><span class="catdot" style="background:${catColor(d.category)}"></span>${esc(d.category)}</td>
     <td data-l="Folder" class="muted" style="font-size:12.5px">${esc(d.folder)}</td><td class="n" data-l="Size">${(d.size / 1024).toFixed(0)} KB</td></tr>`).join("") + "</tbody>";
 }
 $("#libSearch").oninput = (e) => { DOCS.q = e.target.value; drawLibrary(); };
