@@ -60,7 +60,7 @@ function proposalRow(p, after) {
   const pending = p.status === "pending";
   return `<div class="prop ${pending ? "" : "decided"}"><div class="prop-t"><b>${esc(hideAmt(p.title))}</b>
       <div class="li-s">${esc(hideAmt(p.detail || ""))}</div>
-      <div class="li-s">${chip(esc(p.source || ""), "muted")} ${p.effect ? chip(esc(hideAmt(p.effect)), "good") : ""} ${pending ? "" : chip(p.status, p.status === "approved" ? "good" : "muted")}</div></div>
+      <div class="li-s">${chip(esc(p.source || ""), "muted")} ${p.effect ? chip(esc(hideAmt(p.effect)), "good") : ""} ${pending ? "" : chip(esc(p.status), p.status === "approved" ? "good" : "muted")}</div></div>
     ${pending ? `<div class="prop-a"><button class="sm" onclick="decideProposal(${p.id},'approve',${after})">Approve</button><button class="sm ghost" onclick="decideProposal(${p.id},'skip',${after})">Skip</button></div>` : ""}</div>`;
 }
 
@@ -91,7 +91,7 @@ loaders.home = async () => {
     kpi("Net worth", money(n.net_worth, base, 0), d.change_month == null ? "first month of history" : `<span class="${d.change_month >= 0 ? "pos" : "neg"}">${d.change_month >= 0 ? "+" : "−"}${money(Math.abs(d.change_month), base, 0)}</span> this month`) +
     kpi("Cash cushion", cush == null ? "—" : `<span class="txt">${cush} months</span>`, cush == null ? "log spending in Money or a budget" : `target ${d.cushion_target} months`, meter((cush || 0) / (d.cushion_target || 6), cush >= d.cushion_target ? css("--good") : css("--gold"))) +
     kpi("Next 90 days", money(d.next90.in, base, 0) + " in", `${money(d.next90.out, base, 0)} out · net <span class="${d.next90.net >= 0 ? "pos" : "neg"}">${money(d.next90.net, base, 0)}</span>`) +
-    kpi("Deadlines", `<span class="txt">${d.deadlines30} in 30 days</span>`, d.next_deadline ? "Next: " + esc(hideAmt(d.next_deadline.title)).slice(0, 60) : "nothing with a date");
+    kpi("Deadlines", `<span class="txt">${d.deadlines30} in 30 days</span>`, d.next_deadline ? "Next: " + esc(hideAmt(d.next_deadline.title).slice(0, 60)) : "nothing with a date");
 
   // net worth by currency
   const byc = n.by_currency, tot = Object.values(byc).reduce((s, v) => s + v, 0) || 1;
@@ -121,7 +121,7 @@ loaders.home = async () => {
     inbox +
     (opp.count ? rowItem(`${opp.count} tax opportunit${opp.count > 1 ? "ies" : "y"}`, esc(opp.top.map((c) => c.title.replace(/^.*?·\s*/, "")).join(" · ")),
       opp.total_base ? `<span class="num pos">≈ ${money(opp.total_base, base, 0)}</span>` : "", `<button class="sm ghost" onclick="go('opportunities')">Open</button>`) : "") +
-    d.routines.map((r) => rowItem(esc(r.label), esc(hideAmt(r.summary?.text || "")).slice(0, 140), "", chip(r.last_status === "ok" ? "ran " + dayLabel(r.last_run.slice(0, 10)) : "problem", r.last_status === "ok" ? "muted" : "bad"))).join("") ||
+    d.routines.map((r) => rowItem(esc(r.label), esc(hideAmt(r.summary?.text || "").slice(0, 140)), "", chip(r.last_status === "ok" ? "ran " + dayLabel(r.last_run.slice(0, 10)) : "problem", r.last_status === "ok" ? "muted" : "bad"))).join("") ||
     emptyBox("Routines run on their own while the app is open.");
 
   const t = d.trackers[0];
@@ -140,7 +140,7 @@ const FC = { scenario: "base", data: null };
 loaders.forecast = async () => {
   const f = await api("/forecast?scenario=" + FC.scenario);
   FC.data = f;
-  $("#fcScenarios").innerHTML = Object.entries(f.scenarios).map(([k, v]) => `<button class="pillbtn ${k === f.scenario ? "on" : ""}" onclick="FC.scenario='${k}';loaders.forecast()">${esc(v)}</button>`).join("") +
+  $("#fcScenarios").innerHTML = Object.entries(f.scenarios).map(([k, v]) => `<button class="pillbtn ${k === f.scenario ? "on" : ""}" onclick="FC.scenario=${jsArg(k)};loaders.forecast()">${esc(v)}</button>`).join("") +
     `<span class="li-s" style="margin-left:auto">12 months from today · rebuilt by the Forecast refresh routine every morning</span>`;
   const ccys = Object.keys(f.series).sort((a, b) => (a === f.base ? -1 : b === f.base ? 1 : a.localeCompare(b)));
   $("#fcCharts").innerHTML = ccys.map((c) => {
@@ -368,7 +368,7 @@ loaders.taxreturn = async () => {
   TW.data = w; TW.country = w.country; TW.year = w.year;
   $("#twEyebrow").textContent = `Tax return · ${w.name} · ${w.year_label}`;
   $("#twTitle").textContent = w.title;
-  $("#twPick").innerHTML = w.available.map((a) => `<button class="pillbtn ${a.code === w.country ? "on" : ""}" onclick="TW.country='${a.code}';TW.year=null;loaders.taxreturn()">${a.flag} ${esc(a.name)}</button>`).join("") +
+  $("#twPick").innerHTML = w.available.map((a) => `<button class="pillbtn ${a.code === w.country ? "on" : ""}" onclick="TW.country=${jsArg(a.code)};TW.year=null;loaders.taxreturn()">${esc(a.flag)} ${esc(a.name)}</button>`).join("") +
     `<select id="twYear" aria-label="Year">${w.years.map((y) => `<option value="${y}" ${y === w.year ? "selected" : ""}>${esc(w.year_kind === "india_fy" ? "FY " + y + "-" + String(y + 1).slice(2) : y)}</option>`).join("")}</select>`;
   $("#twYear").onchange = (e) => { TW.year = +e.target.value; loaders.taxreturn(); };
   $("#twSteps").innerHTML = w.steps.map((s, i) => `<div class="step ${s.done ? "done" : ""}"><span class="n">${s.done ? "✓" : i + 1}</span><div><b>${esc(s.label)}</b><div class="li-s">${esc(s.detail)}</div></div></div>`).join("");
@@ -377,8 +377,8 @@ loaders.taxreturn = async () => {
     `<form id="twForm" class="form">${sections.map((sec) => `<fieldset><legend>${esc(sec)}</legend>${w.questions.filter((q) => (q.section || "Questions") === sec).map((q) => {
       const src = q.source && q.source !== "you" ? `<span class="li-s">${esc(q.source)}</span>` : "";
       const help = q.help ? `<span class="fieldhint">${esc(q.help)}</span>` : "";
-      if (q.type === "bool") return `<label class="chk"><input type="checkbox" name="${q.id}" ${q.value ? "checked" : ""}> ${esc(q.label)} ${src}${help}</label>`;
-      return `<label>${esc(q.label)} ${src}<input name="${q.id}" type="${q.type === "number" ? "number" : "text"}" step="any" value="${q.value ?? ""}" class="${q.answered ? "" : "unanswered"}">${help}</label>`;
+      if (q.type === "bool") return `<label class="chk"><input type="checkbox" name="${esc(q.id)}" ${q.value ? "checked" : ""}> ${esc(q.label)} ${src}${help}</label>`;
+      return `<label>${esc(q.label)} ${src}<input name="${esc(q.id)}" type="${q.type === "number" ? "number" : "text"}" step="any" value="${esc(q.value ?? "")}" class="${q.answered ? "" : "unanswered"}">${help}</label>`;
     }).join("")}</fieldset>`).join("")}<button class="sm">Save answers</button></form>`;
   $("#twForm").onsubmit = async (e) => { e.preventDefault(); const el = e.target.elements; const answers = {};
     w.questions.forEach((q) => { const i = el[q.id]; if (!i) return; answers[q.id] = q.type === "bool" ? i.checked : i.value; });
@@ -419,11 +419,11 @@ function drawRoutines(r) {
     (pend.map((p) => proposalRow(p, "loaders.routines")).join("") || `<p class="li-s">Routines put suggestions here: transfers from the funding plan, goal changes that fit your surplus, reminders for tax deadlines. AI assistants connected through MCP can suggest too.</p>`) +
     (done.length ? `<details><summary>Recently decided</summary>${done.map((p) => proposalRow(p, "loaders.routines")).join("")}</details>` : "");
   $("#rtList").innerHTML = hdr("Routines", "all run without AI") + r.routines.map((x) => `<div class="rt-item">
-      <label class="switch"><input type="checkbox" ${x.enabled ? "checked" : ""} onchange="toggleRoutine('${x.id}', this.checked)"><span></span></label>
-      <div class="li-l"><div class="li-t">${esc(x.label)} <span class="li-s">${EVERY[x.every] || x.every}</span></div><div class="li-s">${esc(x.about)}</div>
+      <label class="switch"><input type="checkbox" ${x.enabled ? "checked" : ""} onchange="toggleRoutine(${jsArg(x.id)}, this.checked)"><span></span></label>
+      <div class="li-l"><div class="li-t">${esc(x.label)} <span class="li-s">${EVERY[x.every] || esc(x.every)}</span></div><div class="li-s">${esc(x.about)}</div>
         ${x.summary?.text ? `<div class="li-s rt-sum">${esc(hideAmt(x.summary.text))}</div>` : ""}
         ${x.summary?.ai_summary ? `<div class="aiq"><div class="lbl">Summary by ${esc(x.summary.ai_provider || "AI")}</div>${md(x.summary.ai_summary)}</div>` : ""}</div>
-      <div class="li-r"><button class="sm ghost" onclick="runRoutines('${x.id}')">Run</button><div class="li-s">${x.last_run ? "last " + esc(x.last_run.replace("T", " ").slice(0, 16)) : "not run yet"}</div></div></div>`).join("") +
+      <div class="li-r"><button class="sm ghost" onclick="runRoutines(${jsArg(x.id)})">Run</button><div class="li-s">${x.last_run ? "last " + esc(x.last_run.replace("T", " ").slice(0, 16)) : "not run yet"}</div></div></div>`).join("") +
     `<label class="chk" style="margin-top:10px"><input type="checkbox" ${r.ai_summary ? "checked" : ""} onchange="setAiSummary(this.checked)"> Add a short AI-written summary to the monthly review ${r.ai.ready ? `(${esc(r.ai.label || r.ai.provider)})` : "(connect a provider in Settings)"}</label>`;
   const snip = JSON.stringify(r.mcp.config, null, 2);
   $("#rtConnections").innerHTML = hdr("Connections") +
@@ -434,8 +434,8 @@ function drawRoutines(r) {
     (r.mcp.clients || []).map((c) => {
       const st = { connected: ["Connected", "good"], outdated: ["Needs update", "warn"], not_connected: ["Not connected", "muted"], not_found: ["Not installed", "muted"], unreadable: ["Can't read its settings", "bad"] }[c.state];
       const btn = !c.installed ? "" : c.state === "connected"
-        ? `<button class="sm ghost" onclick="mcpConnect('${c.id}', true)">Disconnect</button>`
-        : c.state === "unreadable" ? "" : `<button class="sm" onclick="mcpConnect('${c.id}')">${c.state === "outdated" ? "Update" : "Connect"}</button>`;
+        ? `<button class="sm ghost" onclick="mcpConnect(${jsArg(c.id)}, true)">Disconnect</button>`
+        : c.state === "unreadable" ? "" : `<button class="sm" onclick="mcpConnect(${jsArg(c.id)})">${c.state === "outdated" ? "Update" : "Connect"}</button>`;
       return rowItem(esc(c.label), c.problem ? esc(c.problem) : c.installed ? esc(c.paths.join(" · ")) : "install it and open it once to connect here", btn, chip(st[0], st[1]));
     }).join("") +
     `<p class="li-s">Connect adds one entry to the app's MCP settings and keeps a backup of the file. Other entries are left as they are.</p>` +
@@ -443,7 +443,7 @@ function drawRoutines(r) {
       <pre class="code">${esc(snip)}</pre><button class="sm ghost" onclick="navigator.clipboard.writeText(${esc(JSON.stringify(snip))}).then(()=>toast('Copied'))">Copy</button></details>`;
   $("#rtAudit").innerHTML = hdr("Audit log", "who did what") + `<div class="tablewrap"><table class="rt"><thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead><tbody>` +
     r.audit.slice(0, 25).map((a) => `<tr><td class="li-s">${esc(a.ts.replace("T", " ").slice(5, 16))}</td><td data-l="Who">${chip(esc(a.actor), a.actor.startsWith("MCP") || a.actor.startsWith("AI") ? "lilac" : a.actor === "Routine" ? "muted" : "eur")}</td>
-      <td data-l="What">${esc(hideAmt(a.action))}${a.detail ? `<div class="li-s">${esc(hideAmt(a.detail)).slice(0, 160)}</div>` : ""}</td></tr>`).join("") + `</tbody></table></div>`;
+      <td data-l="What">${esc(hideAmt(a.action))}${a.detail ? `<div class="li-s">${esc(hideAmt(a.detail).slice(0, 160))}</div>` : ""}</td></tr>`).join("") + `</tbody></table></div>`;
   const b = $("#navProposals"); if (b) { b.hidden = !pend.length; b.textContent = pend.length; }
 }
 window.mcpConnect = async (client, remove) => {

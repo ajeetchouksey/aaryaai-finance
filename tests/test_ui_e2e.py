@@ -308,6 +308,36 @@ def test_hide_amounts(page):
     page.wait_for_function("!document.querySelector('#homeKpis .kpi').innerText.includes('•')")
 
 
+# ---------------------------------------------------------------- text from rules, packs and documents is shown, never run
+HOSTILE = ["it's", 'a "quote"', "&quot;);window.__xss=1;//", "'><img src=x onerror=window.__xss=1>", "</script><b>x</b>", "\\", "${x}"]
+
+
+def test_attribute_helpers_keep_hostile_text_inert(page):
+    for s in HOSTILE:
+        got = page.evaluate("""(s) => { const d = document.createElement('div');
+            d.innerHTML = `<button title="${esc(s)}" onclick="window.__v=${jsArg(s)}"></button>`;
+            d.firstChild.click(); return [window.__v, d.firstChild.title]; }""", s)
+        assert got == [s, s]
+    assert page.evaluate("safeUrl('javascript:alert(1)')") == "" and page.evaluate("safeUrl('https://example.org/a')") == "https://example.org/a"
+    assert page.evaluate("window.__xss") is None
+
+
+def test_deadline_with_hostile_title_renders_as_text(page):
+    title = "Pay \"'><img src=x onerror=window.__xss=1> &quot;);window.__xss=2;// tax"
+    page.evaluate("(t) => api('/api/calendar', {method: 'POST', body: {due: '2099-01-15', country: 'DE', title: t, severity: 'normal'}})", title)
+    go(page, "tax", ".tl-item")
+    item = page.locator(".tl-item", has_text="window.__xss=2").first
+    assert title in item.inner_text()
+    item.locator("button:has-text('Ask')").click()               # the title travels inside the button's onclick
+    page.wait_for_selector("section#chat.on")
+    assert page.evaluate("window.__xss") is None
+    go(page, "tax", ".tl-item")
+    item = page.locator(".tl-item", has_text="window.__xss=2").first
+    item.locator("button:has-text('Mark done')").click()
+    page.wait_for_function("CAL.some((c) => c.title.includes('window.__xss=2') && c.status === 'done')")
+    assert page.evaluate("window.__xss") is None
+
+
 def test_api_refuses_requests_without_the_page_token(page, app):
     # (browser contexts here bypass the page's Content-Security-Policy so the test can poll the page; the policy itself is checked here)
     r = page.request.get(app["url"] + "/")
