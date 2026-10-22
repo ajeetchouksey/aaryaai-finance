@@ -746,3 +746,19 @@ pre.code{font:12.5px/1.5 var(--num);background:rgba(8,14,26,.7);border:1px solid
 label.chk{font-size:14px;color:var(--ink2);margin:6px 0}
 label.chk input{width:auto;margin:0;flex:none}
 #toast{max-width:min(560px,92vw);white-space:normal;text-align:center}
+
+/* ---------------------------------------------------------------- accessibility layer
+   Keyboard and screen-reader fixes, kept together so they are easy to review. */
+:root{--ink3:var(--muted)}
+.vh,.drop input,.packpick input,.provpick input{position:absolute!important;display:block;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+.drop,.packpick label,.provpick label,label.btn{position:relative}
+.drop:has(input:focus-visible),.packpick label:has(input:focus-visible),.provpick label:has(input:focus-visible),label:has(>.vh:focus-visible){outline:2px solid var(--lilac);outline-offset:2px}
+input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--lilac);outline-offset:1px}
+tr.click:focus-visible,.ci:focus-visible,.acct:focus-visible{outline:2px solid var(--lilac);outline-offset:-2px}
+.chatlist .ci:focus-within button,.chatlist .ci.on button{visibility:visible}
+.acct:focus-within .edit,.tx:focus-within .del,.tx .del:focus-visible{opacity:1}
+@media (hover:none){.chatlist .ci button{visibility:visible}.acct .edit,.tx .del{opacity:1}}
+@media (max-width:760px){.tx{grid-template-columns:32px 1fr auto auto}.tx .del{display:inline-block;opacity:1;min-width:36px;min-height:36px}}
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tab-error button{flex:none}
+@media (prefers-reduced-motion:reduce){.floor{opacity:1}}

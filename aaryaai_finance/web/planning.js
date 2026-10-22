@@ -218,7 +218,7 @@ window.addPlanTransfer = async (s) => {
 };
 window.editPlanned = async (id) => {
   const f = FC.data || await api("/forecast");
-  const row = f.planned.find((p) => p.id === id) || { date: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), kind: "expense", confidence: "planned", done: 0 };
+  const row = f.planned.find((p) => p.id === id) || { date: todayISO(new Date(Date.now() + 30 * 864e5)), kind: "expense", confidence: "planned", done: 0 };
   const accs = f.accounts.map((a) => [a.id, `${a.name} (${a.currency})`]);
   if (!accs.length) return toast("Add an account in Money first");
   dialog(id ? "Edit planned item" : "Add a planned item", [["date", "Date", "date"], ["kind", "Kind", "select", [["expense", "Expense"], ["income", "Income"], ["transfer", "Transfer"]]],
@@ -452,6 +452,7 @@ function drawRoutines(r) {
   const b = $("#navProposals"); if (b) { b.hidden = !pend.length; b.textContent = pend.length; }
 }
 window.mcpConnect = async (client, remove) => {
+  if (remove && !sure("Disconnect this app? It will no longer see your numbers.")) return;
   try {
     const r = await api("/mcp/connect", { method: "POST", body: { client, remove: !!remove } });
     toast(remove ? `${r.label}: disconnected` : `${r.label} connected. ${r.next}`);

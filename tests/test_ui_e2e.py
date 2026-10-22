@@ -78,6 +78,8 @@ def page(browser, app, request):
     ctx = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
     pg = ctx.new_page()
     pg.errors = []
+    pg.answer_ok = True                                   # "Delete this?" dialogs: answer like a person clicking OK
+    pg.on("dialog", lambda d: d.accept() if pg.answer_ok else d.dismiss())
     pg.on("pageerror", lambda e: pg.errors.append(str(e)))
     pg.on("console", lambda m: m.type == "error" and "Failed to load resource" not in m.text and pg.errors.append(m.text))
     pg.set_default_timeout(15000)
@@ -191,6 +193,10 @@ def test_planned_item_add_edit_delete(page):
     assert page.locator("#fcSources tr", has_text="UI test car repair").count() == 1
     row.locator("button:has-text('Edit')").click()
     dlg.wait_for(state="visible")
+    page.answer_ok = False                                # Cancel on "Delete this for good?": nothing happens
+    dlg.locator("#dlgDel").click()
+    assert dlg.is_visible() and page.locator("#fcPlanned tr", has_text="UI test car repair").count() == 1
+    page.answer_ok = True
     dlg.locator("#dlgDel").click()
     page.wait_for_function("!document.querySelector('#fcPlanned').innerText.includes('UI test car repair')")
 
@@ -383,6 +389,34 @@ def test_deadline_with_hostile_title_renders_as_text(page):
     item.locator("button:has-text('Mark done')").click()
     page.wait_for_function("CAL.some((c) => c.title.includes('window.__xss=2') && c.status === 'done')")
     assert page.evaluate("window.__xss") is None
+
+
+def test_keyboard_reaches_nav_rows_and_file_inputs(page):
+    nav = page.locator("#tabs button[data-tab=money]")
+    assert nav.get_attribute("aria-label") == "Money"
+    go(page, "money")
+    assert nav.get_attribute("aria-current") == "page"
+    assert page.locator("#tabs button[data-tab=home]").get_attribute("aria-current") is None
+    go(page, "documents")
+    page.focus("#fileIn")                                  # visually hidden, but focusable
+    assert page.evaluate("document.activeElement.id") == "fileIn"
+    go(page, "position")
+    row = page.locator("tr.click").first
+    row.focus()
+    page.keyboard.press("Enter")
+    page.locator("#dlg").wait_for(state="visible")
+    page.keyboard.press("Escape")
+
+
+def test_a_screen_that_fails_to_load_offers_a_retry(page):
+    page.evaluate("window.__realLoader = loaders.goals; loaders.goals = async () => { throw new Error('disk on fire'); }; 0")
+    go(page, "goals")
+    banner = page.locator("section#goals .tab-error")
+    banner.wait_for()
+    assert "disk on fire" in banner.inner_text() and banner.get_attribute("role") == "alert"
+    page.evaluate("loaders.goals = window.__realLoader; 0")
+    banner.locator("button:has-text('Try again')").click()
+    page.wait_for_function("!document.querySelector('section#goals .tab-error')")
 
 
 def test_api_refuses_requests_without_the_page_token(page, app):
