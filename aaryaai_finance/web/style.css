@@ -209,6 +209,8 @@ button.link{background:none;color:var(--muted);padding:2px 6px;box-shadow:none}
 input,select,textarea{font:inherit;font-size:15px;padding:9px 11px;border:1px solid var(--line2);border-radius:10px;background:rgba(14,26,45,.6);color:var(--ink);width:100%;min-width:0}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--lilac);box-shadow:0 0 0 3px rgba(169,155,255,.18)}
 select option{background:var(--solid)}
+/* Hide amounts: filled-in numbers stay blurred until you click into one; target percentages stay readable. */
+body.amounts-hidden input[type=number]:not(.tin):not(:focus){filter:blur(6px)}
 input[type=checkbox]{width:18px;height:18px;accent-color:var(--indigo)}
 .result{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:12px;font-size:14px;color:var(--ink2)}
 .result .big{font:600 32px var(--display);color:var(--ink);letter-spacing:-.02em}

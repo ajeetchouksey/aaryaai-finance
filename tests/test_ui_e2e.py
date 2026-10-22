@@ -308,6 +308,26 @@ def test_hide_amounts(page):
     page.wait_for_function("!document.querySelector('#homeKpis .kpi').innerText.includes('•')")
 
 
+def test_hide_amounts_covers_fields_units_toasts_and_chat(page):
+    page.keyboard.press("Alt+KeyH")
+    page.wait_for_function("document.body.classList.contains('amounts-hidden')")
+    try:
+        go(page, "invest", "#holdTbl td[data-l=Units]")
+        units = page.locator("td[data-l=Units]").first.inner_text()
+        assert units == "•••"
+        assert page.evaluate("hideAmt('Paid ¥12,000 and S$300 and 500 SGD')") == "Paid ¥•••• and S$ •••• and •••• SGD"
+        page.evaluate("toast('Saved: 1,234.50 EUR transferred')")
+        assert "1,234" not in page.locator("#toast").inner_text()
+        assert "4,000" not in page.evaluate("userMsg('my salary is €4,000')")
+        go(page, "forecast", "#floorForm input[type=number]")
+        field = page.locator("#floorForm input[type=number]").first
+        assert "blur" in field.evaluate("e => getComputedStyle(e).filter")
+        field.focus()
+        assert field.evaluate("e => getComputedStyle(e).filter") == "none"      # readable while you edit it
+    finally:
+        page.keyboard.press("Alt+KeyH")
+
+
 # ---------------------------------------------------------------- text from rules, packs and documents is shown, never run
 HOSTILE = ["it's", 'a "quote"', "&quot;);window.__xss=1;//", "'><img src=x onerror=window.__xss=1>", "</script><b>x</b>", "\\", "${x}"]
 
