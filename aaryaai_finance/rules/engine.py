@@ -366,12 +366,15 @@ def validate_rules_yaml(text: str) -> list[str]:
     from ..core.importer import check_profile
     for p in d.get("import_profiles", []) or []:
         errs += check_profile(p)
+    from ..core.categorize import check_category_rule
+    for r in d.get("category_rules", []) or []:
+        errs += check_category_rule(r)
     return errs
 
 
-def load_import_profiles(folder: Path, packs: dict) -> tuple[list, list]:
-    """Bank-statement profiles: yours first (same id replaces a pack's), then each switched-on pack's."""
-    from ..core.importer import check_profile
+def _load_section(folder: Path, packs: dict, key: str, check) -> tuple[list, list]:
+    """One kind of rule (`key:`) from your rules files first (same id replaces a pack's), then each switched-on pack.
+    A rule that fails `check` is skipped and reported."""
     found, errs = [], []
     if folder and folder.exists():
         for p in sorted(folder.glob("*.y*ml")):
@@ -379,20 +382,32 @@ def load_import_profiles(folder: Path, packs: dict) -> tuple[list, list]:
                 d = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
             except Exception:  # noqa: BLE001 — already reported by load_yaml_rules
                 continue
-            found += [{**r, "_source": f"yours · {p.name}"} for r in (d.get("import_profiles") or []) if isinstance(r, dict)]
+            found += [{**r, "_source": f"yours · {p.name}"} for r in (d.get(key) or []) if isinstance(r, dict)]
     for code, pk in packs.items():
         found += [{**r, "country": r.get("country", code), "_source": f"{pk.get('flag', '')} {pk.get('name', code)} pack"}
-                  for r in (pk.get("import_profiles") or []) if isinstance(r, dict)]
+                  for r in (pk.get(key) or []) if isinstance(r, dict)]
     seen, out = set(), []
     for r in found:
-        bad = check_profile(r)
+        bad = check(r)
         if bad:
             errs += [f"{r.get('_source', '')}: {e}" for e in bad]
         elif r["id"] not in seen:
             seen.add(r["id"])
             out.append(r)
-    from ..core.importer import GENERIC
-    return out + [g for g in GENERIC if g["id"] not in seen], errs
+    return out, errs
+
+
+def load_import_profiles(folder: Path, packs: dict) -> tuple[list, list]:
+    """Bank-statement profiles, then the built-in generic one."""
+    from ..core.importer import GENERIC, check_profile
+    out, errs = _load_section(folder, packs, "import_profiles", check_profile)
+    have = {p["id"] for p in out}
+    return out + [g for g in GENERIC if g["id"] not in have], errs
+
+
+def load_category_rules(folder: Path, packs: dict) -> tuple[list, list]:
+    from ..core.categorize import check_category_rule
+    return _load_section(folder, packs, "category_rules", check_category_rule)
 
 
 class RuleSet:
@@ -400,7 +415,8 @@ class RuleSet:
         self.settings, self.packs, self.trackers = settings, packs, trackers
         user_docs, user_dls, self.errors = load_yaml_rules(settings.rules_dir)
         self.import_profiles, perrs = load_import_profiles(settings.rules_dir, packs)
-        self.errors += perrs
+        self.category_rules, cerrs = load_category_rules(settings.rules_dir, packs)
+        self.errors += perrs + cerrs
         tracker_docs = []
         for t in trackers:
             for r in t.get("document_rules", []) or []:

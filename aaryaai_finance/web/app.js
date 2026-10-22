@@ -1213,7 +1213,7 @@ $("#txForm").onsubmit = async (e) => {
     if (b.frequency) await api("/api/recurring", { method: "POST", body: { ...row, frequency: b.frequency, start_date: b.date, end_date: b.end_date || null, active: 1 } });
     else await api("/api/transactions", { method: "POST", body: { ...row, date: b.date, doc_id: f.dataset.doc ? +f.dataset.doc : null } });
     toast(b.frequency ? `Repeating ${MONEY.kind} set up` : `${MONEY.kind[0].toUpperCase() + MONEY.kind.slice(1)} added`);
-    f.amount.value = ""; f.note.value = ""; f.to_amount.value = ""; f.frequency.value = ""; f.end_date.value = ""; delete f.dataset.doc;
+    f.amount.value = ""; f.note.value = ""; f.to_amount.value = ""; f.frequency.value = ""; f.end_date.value = ""; delete f.dataset.doc; delete f.category.dataset.picked;
     $(".quick").classList.remove("repeat"); setKind(MONEY.kind); loaders.money();
   } catch (err) { $("#txErr").textContent = err.message; }
 };
@@ -1382,15 +1382,18 @@ $("#impFile").onchange = async (e) => {
     showImport(p, file.name);
   } catch (err) { $("#impMsg").textContent = err.message; }
 };
-function showImport(p, filename) {
+async function showImport(p, filename) {
   const c = p.account.currency, d = $("#impDlg");
+  if (!MONEY.meta) MONEY.meta = await api("/money/meta");
+  const catSel = (r) => { const list = r.kind === "income" ? MONEY.meta.income_categories : MONEY.meta.expense_categories;
+    return `<select data-cat="${r.i}" aria-label="Category" ${r.category_rule ? `title="Set by rule ${esc(r.category_rule)}"` : ""}><option value="">—</option>${list.map((x) => `<option ${x === r.category ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>`; };
   const row = (r) => `<tr class="${r.duplicate ? "dup" : ""}"><td><input type="checkbox" data-i="${r.i}" ${r.duplicate ? "" : "checked"} aria-label="Import this row"></td>
     <td>${esc(r.date)}</td><td>${esc(hideAmt(r.description)) || `<span class="hint">no description</span>`}${r.duplicate ? ` <span class="tag">already there</span>` : ""}</td>
-    <td class="n ${r.kind === "income" ? "pos" : ""}">${r.kind === "income" ? "+" : "−"}${money(r.amount, c, 2)}</td></tr>`;
+    <td>${catSel(r)}</td><td class="n ${r.kind === "income" ? "pos" : ""}">${r.kind === "income" ? "+" : "−"}${money(r.amount, c, 2)}</td></tr>`;
   $("#impBody").innerHTML = `<h3 id="impTitle">Import into ${esc(p.account.name)}</h3>
     <p class="hint">${esc(filename)} · read with “${esc(p.profile.label)}” (${esc(p.profile.source)}) · ${p.rows.length} rows, ${p.new} new${p.skipped.length ? ` · ${p.skipped.length} lines skipped` : ""}</p>
-    <div class="tablewrap imp-rows"><table class="rt"><thead><tr><th><input type="checkbox" id="impAll" aria-label="Tick all" ${p.new === p.rows.length ? "checked" : ""}></th><th>Date</th><th>Description</th><th class="n">Amount</th></tr></thead>
-      <tbody>${p.rows.map(row).join("") || `<tr><td colspan="4" class="hint">No rows with a date and an amount.</td></tr>`}</tbody></table></div>
+    <div class="tablewrap imp-rows"><table class="rt"><thead><tr><th><input type="checkbox" id="impAll" aria-label="Tick all" ${p.new === p.rows.length ? "checked" : ""}></th><th>Date</th><th>Description</th><th>Category</th><th class="n">Amount</th></tr></thead>
+      <tbody>${p.rows.map(row).join("") || `<tr><td colspan="5" class="hint">No rows with a date and an amount.</td></tr>`}</tbody></table></div>
     ${p.skipped.length ? `<details><summary class="hint">Lines that were skipped</summary><ul class="hint">${p.skipped.map((s) => `<li>Line ${s.line}: ${esc(s.reason)} · ${esc(hideAmt(s.text))}</li>`).join("")}</ul></details>` : ""}
     <div class="dlg-actions"><button type="button" class="ghost" id="impCancel">Cancel</button><button type="button" id="impGo"></button></div>`;
   const boxes = () => $$("#impBody tbody input[type=checkbox]");
@@ -1399,7 +1402,7 @@ function showImport(p, filename) {
   $("#impAll").onchange = (e) => { boxes().forEach((b) => b.checked = e.target.checked); count(); };
   $("#impCancel").onclick = () => d.close();
   $("#impGo").onclick = async () => {
-    const rows = boxes().filter((b) => b.checked).map((b) => p.rows[+b.dataset.i]);
+    const rows = boxes().filter((b) => b.checked).map((b) => ({ ...p.rows[+b.dataset.i], category: $(`#impBody select[data-cat="${b.dataset.i}"]`).value }));
     $("#impGo").disabled = true;
     try {
       const r = await api("/import/apply", { method: "POST", body: { account_id: p.account.id, filename, rows } });
@@ -1407,4 +1410,23 @@ function showImport(p, filename) {
     } catch (err) { toast(err.message); $("#impGo").disabled = false; }
   };
   count(); d.showModal();
+}
+
+// ---------------- category rules while you type ----------------
+// Your category rules (and the packs') suggest a category from the note, unless you picked one yourself.
+{
+  const f = $("#txForm"); let timer;
+  f.category.addEventListener("change", () => { f.category.dataset.picked = "1"; });
+  f.note.addEventListener("input", () => {
+    clearTimeout(timer);
+    if (f.category.dataset.picked || MONEY.kind === "transfer") return;
+    timer = setTimeout(async () => {
+      try {
+        const r = await api("/categorize", { method: "POST", body: { text: f.note.value, kind: MONEY.kind } });
+        if (r.category && !f.category.dataset.picked && [...f.category.options].some((o) => o.value === r.category)) {
+          f.category.value = r.category; f.category.title = "Suggested by rule " + r.rule;
+        }
+      } catch (e) { /* a suggestion is optional */ }
+    }, 350);
+  });
 }
