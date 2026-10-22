@@ -150,7 +150,8 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         need(p.get("confirm") == "REPLACE", "Type REPLACE to confirm")
         c.settings.backups_dir.mkdir(parents=True, exist_ok=True)
         b = c.settings.backups_dir / f"finance-before-import-{datetime.now():%Y%m%d-%H%M%S}.db"
-        shutil.copy2(c.settings.db_path, b)
+        M.backup_copy(c.settings.db_path, b)
+        M.prune_backups(c.settings.backups_dir)
         counts = c.db.import_all(p.get("data") or {})
         c.audit("You", "Imported data from JSON", json.dumps(counts)[:300])
         return {"ok": True, "imported": counts, "backup": str(b)}

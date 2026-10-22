@@ -15,6 +15,15 @@ class IntegrityProblem(ValueError):
     """A save/delete that would break a relation (e.g. deleting an account that still has transactions)."""
 
 
+class _Conn(sqlite3.Connection):
+    """`with db.conn() as c:` commits (or rolls back on error) and then closes the connection."""
+    def __exit__(self, *exc):
+        try:
+            return super().__exit__(*exc)
+        finally:
+            self.close()
+
+
 class DB:
     def __init__(self, path: Path, model: dict | None = None, backup_dir: Path | None = None):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -27,7 +36,7 @@ class DB:
                 c.execute("INSERT OR IGNORE INTO settings VALUES (?,?)", (k, v))
 
     def conn(self):
-        c = sqlite3.connect(self.path)
+        c = sqlite3.connect(self.path, timeout=10, factory=_Conn)   # wait for the MCP process or a routine instead of failing
         c.row_factory = sqlite3.Row
         c.execute("PRAGMA foreign_keys=ON")
         return c
