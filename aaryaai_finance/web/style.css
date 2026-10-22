@@ -26,6 +26,9 @@
   /* surfaces as r,g,b so each use keeps its own transparency; the light theme swaps them */
   --well-rgb:14,26,45; --deep-rgb:8,14,26; --glass1-rgb:51,65,85; --glass2-rgb:30,41,59; --side-bg:#0b1526; --on-tint:#fff;
   --ccy1:#38bdf8; --ccy2:#a99bff; --ccy3:#34d399; --ccy4:#fbbf24; --ccy5:#f472b6;   /* 6-digit hex: charts append alpha */
+  /* category colours for charts and dots (tone() in app.js); 6-digit hex too */
+  --c-indigo:#5b4bd6; --c-gold:#fbbf24; --c-green:#34d399; --c-pink:#f472b6; --c-orange:#fb923c; --c-teal:#2dd4bf; --c-lavender:#c4b5fd;
+  --c-lime:#a3e635; --c-slate:#64748b; --c-sky:#38bdf8; --c-lilac:#a99bff; --c-grey:#94a3b8; --c-sand:#e5c07b; --c-fuchsia:#e879f9;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -780,6 +783,8 @@ tr.click:focus-visible,.ci:focus-visible,.acct:focus-visible{outline:2px solid v
   --panel:#fff; --panel2:#eef1f8; --pline:rgba(15,23,42,.1); --warn:#b45309;
   --well-rgb:255,255,255; --deep-rgb:236,240,247; --glass1-rgb:255,255,255; --glass2-rgb:250,251,253; --side-bg:#fff; --on-tint:var(--indigo-deep);
   --ccy1:#0284c7; --ccy2:#6a5ae0; --ccy3:#059669; --ccy4:#d97706; --ccy5:#db2777;
+  --c-indigo:#5b4bd6; --c-gold:#b45309; --c-green:#059669; --c-pink:#db2777; --c-orange:#ea580c; --c-teal:#0d9488; --c-lavender:#8b5cf6;
+  --c-lime:#4d7c0f; --c-slate:#64748b; --c-sky:#0284c7; --c-lilac:#6a5ae0; --c-grey:#78859b; --c-sand:#a16207; --c-fuchsia:#c026d3;
 }
 :root[data-theme=light] body{background:radial-gradient(ellipse 90% 50% at 50% -10%,#5b4bd614 0%,transparent 60%),var(--paper)}
 :root[data-theme=light] .side-foot .by img{filter:invert(1)}

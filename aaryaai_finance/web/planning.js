@@ -21,7 +21,9 @@ function hstack(parts, h = 16) {
   return `<div class="hstack" role="img" aria-label="${esc(said)}" style="height:${h}px">${parts.filter((p) => p.pct > 0.2).map((p) => `<i style="width:${p.pct}%;background:${p.color}" title="${esc(p.label)} ${p.pct.toFixed(0)}%"></i>`).join("")}</div>`;
 }
 const legendRow = (items) => `<div class="legend">${items.map(([t, c]) => `<span><i style="background:${c}"></i>${t}</span>`).join("")}</div>`;
-const PALETTE = ["#5b4bd6", "#38bdf8", "#a99bff", "#34d399", "#fbbf24", "#f472b6", "#fb923c", "#2dd4bf", "#94a3b8"];
+// stacked shares: neighbours checked for colour-blind separation (tone() and the --c-* tokens are in app.js / style.css)
+const PALETTE = ["indigo", "sky", "green", "lilac", "gold", "teal", "orange", "pink", "lime"];
+const pal = (i) => tone(PALETTE[i % PALETTE.length]);
 
 // Vertical bars that can go below zero, with an optional floor line. rows: [{label, v, color, note}]
 function vbars(rows, { h = 170, floor = null, floorLabel = "", fmt = (v) => v, title = "Bar chart" } = {}) {
@@ -266,8 +268,8 @@ async function drawOdds() {
     <p class="li-s" id="lvNote"></p><button class="sm" id="lvSave">Use this amount</button></div>`;
   const alloc = o.allocation, surplus = Math.max(o.surplus, 0) || 1;
   const wf = `<div class="card">${hdr("Where the monthly surplus goes", `${money(o.income, base, 0)} in − ${money(o.spend, base, 0)} out = ${money(o.surplus, base, 0)}`)}
-    ${hstack([...alloc.map((a, i) => ({ pct: a.amount / surplus * 100, color: PALETTE[i % PALETTE.length], label: a.label })), { pct: Math.max(o.unallocated, 0) / surplus * 100, color: "rgba(148,163,184,.35)", label: "Not assigned" }], 18)}
-    ${alloc.map((a, i) => rowItem(`<i class="dot" style="background:${PALETTE[i % PALETTE.length]}"></i> ${esc(a.label)}`, "", `<span class="num">${money(a.amount, base, 0)}</span>`)).join("")}
+    ${hstack([...alloc.map((a, i) => ({ pct: a.amount / surplus * 100, color: pal(i), label: a.label })), { pct: Math.max(o.unallocated, 0) / surplus * 100, color: "rgba(148,163,184,.35)", label: "Not assigned" }], 18)}
+    ${alloc.map((a, i) => rowItem(`<i class="dot" style="background:${pal(i)}"></i> ${esc(a.label)}`, "", `<span class="num">${money(a.amount, base, 0)}</span>`)).join("")}
     ${rowItem(`<i class="dot" style="background:rgba(148,163,184,.5)"></i> Not assigned to a goal`, o.unallocated < 0 ? "<span class='neg'>Goals need more than the surplus</span>" : "buffer, or room to raise a goal", `<span class="num ${o.unallocated < 0 ? "neg" : ""}">${money(o.unallocated, base, 0)}</span>`)}</div>`;
   const wi = `<div class="card">${hdr("What if", "same goals, different futures")}<div class="tablewrap"><table class="rt"><thead><tr><th>Scenario</th>${o.goals.map((g) => `<th class="n">${esc(g.name.split(" (")[0])}</th>`).join("")}</tr></thead><tbody>
     ${o.whatif.map((w) => `<tr><td>${esc(w.label)}</td>${w.probabilities.map((p, i) => `<td class="n" data-l="${esc(o.goals[i].name)}">${chip(pctText(p), probTone(p))}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>`;
@@ -295,7 +297,9 @@ async function drawOdds() {
 }
 
 // ---------------------------------------------------------------- DIVERSIFY
-const CLS_COLOR = { shares: "#5b4bd6", bonds: "#34d399", cash: "#38bdf8", property: "#fbbf24", gold: "#e5c07b", pension: "#a99bff", other: "#94a3b8" };
+// gold and pension were too close to property and shares (checked all pairs, both themes); "other" stays neutral grey
+const CLS_COLOR = { shares: "indigo", bonds: "green", cash: "sky", property: "gold", gold: "orange", pension: "lavender", other: "grey" };
+const clsColor = (k) => tone(CLS_COLOR[k] || "grey");
 loaders.diversify = async () => {
   const d = await api("/diversify");
   const base = d.base;
@@ -304,10 +308,10 @@ loaders.diversify = async () => {
     ${hstack(rows.map((r, i) => ({ pct: r.share * 100, color: colorOf(r, i), label: labelOf(r) })), 18)}
     ${legendRow(rows.filter((r) => r.share >= 0.005).slice(0, 7).map((r, i) => [`${esc(labelOf(r))} ${Math.round(r.share * 100)}%`, colorOf(r, i)]))}</div>`;
   $("#dvXray").innerHTML = hdr("X-ray", "looks inside index funds") + (d.total ? (
-    xr("Asset type", d.classes, (r) => CLS_COLOR[r.key] || "#94a3b8") +
-    xr("Country", d.countries, (r, i) => PALETTE[i % PALETTE.length]) +
-    xr("Currency", d.currencies, (r) => ccyColor(r.key) || "#94a3b8", (r) => r.key) +
-    (d.sectors.length ? xr("Sector (shares only)", d.sectors, (r, i) => PALETTE[i % PALETTE.length], (r) => r.key) : "")) :
+    xr("Asset type", d.classes, (r) => clsColor(r.key)) +
+    xr("Country", d.countries, (r, i) => pal(i)) +
+    xr("Currency", d.currencies, (r) => ccyColor(r.key) || tone("grey"), (r) => r.key) +
+    (d.sectors.length ? xr("Sector (shares only)", d.sectors, (r, i) => pal(i), (r) => r.key) : "")) :
     emptyBox("Add accounts, investments or assets to see the mix."));
   $("#dvFlags").innerHTML = hdr("Concentration flags") + (d.flags.map((f) => rowItem(esc(f.title), esc(f.detail), "", chip(f.tone === "bad" ? "Over" : f.tone === "warn" ? "Watch" : "Note", f.tone === "bad" ? "bad" : f.tone === "warn" ? "warn" : "muted"))).join("") || `<p>No flags against your rules.</p>`);
   $("#dvCompanies").innerHTML = hdr("Biggest companies", "through all your funds") + (d.companies.slice(0, 6).map((c) => rowItem(esc(c.name), esc(c.via.join(" + ")), `<span class="num">${(c.share * 100).toFixed(1)}%</span>`, c.via.length > 1 ? chip("in " + c.via.length + " funds", "warn") : "")).join("") || `<p class="li-s">No look-through data yet.</p>`);
@@ -315,7 +319,7 @@ loaders.diversify = async () => {
   $("#dvTargets").innerHTML = hdr("Target vs actual", "your target mix, in %") +
     `<form id="tgtForm"><div class="tablewrap"><table class="rt"><thead><tr><th>Asset</th><th class="n">Target %</th><th class="n">Actual</th><th class="n">Gap</th></tr></thead><tbody>` +
     ["shares", "bonds", "cash", "property", "gold", "pension", "other"].map((k) => { const r = t.find((x) => x.key === k) || { key: k, label: k[0].toUpperCase() + k.slice(1), actual: 0 };
-      return `<tr><td><i class="dot" style="background:${CLS_COLOR[k]}"></i> ${esc(r.label)}</td><td class="n" data-l="Target %"><input class="tin" name="${k}" type="number" min="0" max="100" step="1" value="${r.target ?? ""}"></td>
+      return `<tr><td><i class="dot" style="background:${clsColor(k)}"></i> ${esc(r.label)}</td><td class="n" data-l="Target %"><input class="tin" name="${k}" type="number" min="0" max="100" step="1" value="${r.target ?? ""}"></td>
         <td class="n" data-l="Actual">${Math.round((r.actual || 0) * 100)}%</td><td class="n ${r.gap > 0.005 ? "eurtxt" : r.gap < -0.005 ? "warntxt" : ""}" data-l="Gap">${r.gap == null ? "—" : (r.gap > 0 ? "+" : "") + Math.round(r.gap * 100) + "%"}</td></tr>`; }).join("") +
     `</tbody></table></div><div class="form inline" style="margin-top:10px"><label>Invested each month (${esc(base)}) <input name="monthly_investable" type="number" step="any" value="${d.monthly_investable || ""}"></label><button class="sm">Save targets</button></div></form>`;
   $("#tgtForm").onsubmit = async (e) => { e.preventDefault(); const el = e.target.elements; const targets = {}; ["shares", "bonds", "cash", "property", "gold", "pension", "other"].forEach((k) => targets[k] = el[k].value);

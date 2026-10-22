@@ -568,11 +568,16 @@ def test_theme_follows_the_computer_and_can_be_chosen(browser, app):
         return ctx, pg
     theme = "document.documentElement.dataset.theme"
     paper = "getComputedStyle(document.documentElement).getPropertyValue('--paper').trim()"
+    slice2 = "charts.chCat.data.datasets[0].backgroundColor[1]"                       # doughnut colours are theme tokens too
     ctx, pg = open_("dark")
     assert pg.evaluate(theme) == "dark" and pg.evaluate(paper) == "#0e1a2d"
+    go(pg, "position", "#chCat[role=img]")
+    assert pg.evaluate(slice2) == "#fbbf24"
     ctx.close()
     ctx, pg = open_("light")
     assert pg.evaluate(theme) == "light" and pg.evaluate(paper) == "#f4f6fb"           # "System" is the default
+    go(pg, "position", "#chCat[role=img]")
+    assert pg.evaluate(slice2) == "#b45309"
     go(pg, "settings", "#themeSeg")
     assert pg.get_attribute("#themeSeg [data-theme-mode=system]", "aria-pressed") == "true"
     pg.click("#themeSeg [data-theme-mode=dark]")
