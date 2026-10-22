@@ -57,6 +57,7 @@ def test_v3_database_gains_skip_dates_with_a_backup(tmp_path):
     v3 = copy.deepcopy(v4)
     v3["version"] = 3
     del v3["entities"]["recurring"]["fields"]["skip_dates"]
+    v3["entities"].pop("loans", None)                                   # added later (v5)
     p = tmp_path / "finance.db"
     old = DB(p, v3)
     a = old.upsert("accounts", {"name": "Giro", "country": "DE", "currency": "EUR"})
@@ -65,7 +66,7 @@ def test_v3_database_gains_skip_dates_with_a_backup(tmp_path):
     assert "recurring" in new.sync_report["rebuilt"] and Path(new.sync_report["backup"]).exists()
     r = new.list("recurring")[0]
     assert r["amount"] == 10 and r["skip_dates"] is None
-    assert sqlite3.connect(p).execute("PRAGMA user_version").fetchone() == (4,)
+    assert sqlite3.connect(p).execute("PRAGMA user_version").fetchone() == (v4["version"],)
 
 
 def test_forecast_survives_a_missing_exchange_rate():

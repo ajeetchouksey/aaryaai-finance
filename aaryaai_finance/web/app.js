@@ -384,8 +384,9 @@ $("#wizBack").onclick = () => { try { collectWizard(); } catch (e) { } WIZ.step 
 // ---------------- POSITION ----------------
 let ITEMS = [];
 loaders.position = async () => {
-  const [p, items, acc] = await Promise.all([api("/calc/position"), api("/api/items"), api("/money/accounts").catch(() => ({ accounts: [] }))]);
-  ITEMS = items;
+  const [p, items, acc, loans] = await Promise.all([api("/calc/position"), api("/api/items"), api("/money/accounts").catch(() => ({ accounts: [] })), api("/loans")]);
+  ITEMS = items; LOANS = loans; LOAN_ACCTS = acc.accounts || [];
+  drawLoans();
   const n = p.net_worth, base = p.base;
   $("#posDate").textContent = "Position · " + new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   // one column per currency (base first), max 3
@@ -515,6 +516,29 @@ function countUp(el, target, c) {
   requestAnimationFrame(step);
 }
 const ITEM_CATS = ["Property", "Property (under construction)", "Retirement / pension", "Provident fund", "Vehicle", "Gold / valuables", "Other asset", "Home loan", "Personal loan", "Credit card", "Other debt"];
+let LOANS = [], LOAN_ACCTS = [];
+function drawLoans() {
+  $("#loansTbl").innerHTML = `<thead><tr><th>Loan</th><th class="n">Still owed</th><th class="n">Instalment</th><th class="n">Rate</th><th>Paid off</th><th class="n">Interest left</th></tr></thead><tbody>` +
+    (LOANS.map((l) => `<tr class="click" tabindex="0" onclick="editLoan(${Number(l.id)})"><td>${esc(l.name)}${l.lender ? `<div class="hint" style="font-weight:400">${esc(l.lender)}</div>` : ""}
+        ${l.error ? `<div class="err">${esc(l.error)}</div>` : ""}${l.active ? "" : ` <span class="tag">closed</span>`}</td>
+      <td class="n" data-l="Still owed">${l.error ? "—" : money(l.outstanding, l.currency)}</td><td class="n" data-l="Instalment">${l.error ? "—" : money(l.emi, l.currency, 2)}</td>
+      <td class="n" data-l="Rate">${pct((l.annual_rate || 0) / 100, 2)}</td><td data-l="Paid off">${l.error ? "—" : esc(new Date(l.payoff_date).toLocaleDateString("en-GB", { month: "short", year: "numeric" }))}
+        ${l.error ? "" : `<div class="hint">${l.months_left} instalments left</div>`}</td>
+      <td class="n" data-l="Interest left">${l.error ? "—" : money(l.interest_left, l.currency)}</td></tr>`).join("") ||
+      `<tr><td colspan="6"><div class="empty">No loans. Add one to see what you still owe and when it's paid off.</div></td></tr>`) + "</tbody>";
+}
+window.editLoan = (id) => {
+  const row = LOANS.find((l) => l.id === id) || { currency: BASE(), active: 1, start_date: new Date().toISOString().slice(0, 10) };
+  dialog(id ? "Edit loan" : "Add a loan", [["name", "Name (e.g. Home loan)"], ["lender", "Lender"], ["currency", "Currency", "select", CFG.currencies],
+    ["principal", "Amount borrowed", "number"], ["annual_rate", "Interest rate (% a year)", "number"], ["start_date", "Start date", "date"],
+    ["term_months", "Term in months (or leave empty and give the instalment)", "number"], ["emi", "Monthly instalment (or leave empty and give the term)", "number"],
+    ["account_id", "Paid from", "select", [["", "—"], ...LOAN_ACCTS.map((a) => [a.id, `${a.name} (${a.currency})`])]],
+    ["active", "Still running", "checkbox"], ["note", "Note"]], row,
+    async (r) => { r.account_id = r.account_id ? +r.account_id : null;
+      const keep = ["id", "name", "lender", "currency", "principal", "annual_rate", "start_date", "term_months", "emi", "account_id", "active", "note"];
+      await api("/api/loans", { method: "POST", body: Object.fromEntries(keep.filter((k) => k in r).map((k) => [k, r[k]])) }); loaders.position(); },
+    async (i) => { await api("/api/loans/" + i, { method: "DELETE" }); loaders.position(); });
+};
 window.editItem = (id) => {
   const row = ITEMS.find((i) => i.id === id) || { kind: "asset", currency: BASE(), liquid: 0, country: CFG.countries?.[0] || "" };
   dialog(id ? "Edit asset or debt" : "Add an asset or debt", [["name", "Name"], ["kind", "Own or owe?", "select", ["asset", "liability"]],

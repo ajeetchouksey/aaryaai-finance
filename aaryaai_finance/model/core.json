@@ -1,6 +1,6 @@
 {
   "$comment": "The data model. The database is generated from this file; packs and users can add fields (see CONTRIBUTING.md). Field types: text, int, number, money, bool, date, datetime, enum, ref, json, currency, country.",
-  "version": 4,
+  "version": 5,
   "entities": {
     "accounts": {
       "label": "Account",
@@ -386,6 +386,67 @@
           "strict": false,
           "label": "Asset class (for Diversify)",
           "help": "Leave empty to guess from the type."
+        }
+      }
+    },
+    "loans": {
+      "label": "Loan",
+      "fields": {
+        "name": {
+          "type": "text",
+          "required": true,
+          "label": "Loan"
+        },
+        "lender": {
+          "type": "text",
+          "label": "Lender"
+        },
+        "currency": {
+          "type": "currency",
+          "required": true,
+          "label": "Currency"
+        },
+        "principal": {
+          "type": "money",
+          "required": true,
+          "label": "Amount borrowed"
+        },
+        "annual_rate": {
+          "type": "number",
+          "default": 0,
+          "label": "Interest rate (% a year)",
+          "help": "For example 8.5 for 8.5% a year."
+        },
+        "start_date": {
+          "type": "date",
+          "required": true,
+          "label": "Start date",
+          "help": "The first instalment is due one month later."
+        },
+        "term_months": {
+          "type": "int",
+          "label": "Term (months)",
+          "help": "Leave empty if you give the monthly instalment instead."
+        },
+        "emi": {
+          "type": "money",
+          "label": "Monthly instalment (EMI)",
+          "help": "Leave empty to work it out from the term."
+        },
+        "account_id": {
+          "type": "ref",
+          "to": "accounts",
+          "on_delete": "set_null",
+          "label": "Paid from"
+        },
+        "active": {
+          "type": "bool",
+          "default": 1,
+          "label": "Still running"
+        },
+        "note": {
+          "type": "text",
+          "label": "Note"
         }
       }
     },

@@ -109,7 +109,38 @@ class Ctx:
                 for h in self.db.list("holdings")]
 
     def all_items(self) -> list[dict]:
-        return self.db.list("items") + self.account_items() + self.holding_items()
+        return self.db.list("items") + self.account_items() + self.holding_items() + self.loan_items()
+
+    # ---------------- loans
+    def loans(self) -> list[dict]:
+        """Each loan with its schedule (what is still owed, instalment, payoff date). A loan that can't be worked out says why."""
+        from .core.loans import schedule
+        out = []
+        for ln in self.db.list("loans"):
+            try:
+                out.append({**ln, **schedule(ln)})
+            except (ValueError, TypeError) as e:
+                out.append({**ln, "error": str(e)})
+        return out
+
+    def loan_items(self) -> list[dict]:
+        return [{"name": ln["name"], "kind": "liability", "category": "Loan", "amount": ln["outstanding"], "currency": ln["currency"], "liquid": 0}
+                for ln in self.loans() if ln.get("active") and not ln.get("error") and ln["outstanding"] > 0]
+
+    def loan_payments(self, recurring: list[dict]) -> list[dict]:
+        """Loan instalments as repeating entries for the cash forecast. A loan already paid by one of your repeating
+        entries (same account, amount within 2%) isn't counted twice."""
+        out = []
+        for ln in self.loans():
+            if not (ln.get("active") and ln.get("account_id") and not ln.get("error") and ln.get("next_payment")):
+                continue
+            if any(r.get("active") and r.get("account_id") == ln["account_id"] and r.get("kind") == "expense"
+                   and abs(float(r.get("amount") or 0) - ln["emi"]) <= 0.02 * ln["emi"] for r in recurring):
+                continue
+            out.append({"id": f"loan{ln['id']}", "kind": "expense", "account_id": ln["account_id"], "amount": ln["emi"], "category": "Loan / EMI",
+                        "note": f"{ln['name']} instalment", "frequency": "monthly", "start_date": ln["next_payment"],
+                        "end_date": ln["payoff_date"], "active": 1, "to_account_id": None, "to_amount": None})
+        return out
 
     def net_worth(self) -> dict:
         try:
@@ -208,7 +239,8 @@ class Ctx:
         return out
 
     def forecast(self, scenario: str = "base", months: int = 12) -> dict:
-        return fc.forecast(self.accounts_with_balance(), self.db.list("recurring"), self.db.list("planned", "date"), self.trackers,
+        rec = self.db.list("recurring")
+        return fc.forecast(self.accounts_with_balance(), rec + self.loan_payments(rec), self.db.list("planned", "date"), self.trackers,
                            self.db.list("transactions"), self.rates, self.base, self.floors(), months, scenario=scenario)
 
     def monthly_spend(self) -> float:
