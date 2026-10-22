@@ -85,6 +85,10 @@ loaders.home = async () => {
     $("#homeAttention").innerHTML = `<div class="banner bad"><svg><use href="#i-wave"/></svg><div>Your ${esc(a.ccy)} accounts dip to <b>${money(a.low, a.ccy, 0)}</b> in ${monthLabel(a.month, true)}, below your floor of ${money(a.floor, a.ccy, 0)}, and no other currency has room to cover it.</div>
       <button class="sm" onclick="go('forecast')">See options</button></div>`;
   } else $("#homeAttention").innerHTML = "";
+  const over = d.budget_over || [];
+  $("#homeBudget").innerHTML = over.length ? `<div class="banner warn"><svg><use href="#i-wave"/></svg><div>This month you're over budget on
+    ${over.map((r) => `<b>${esc(r.category)}</b> (${money(r.spent, d.base, 0)} of ${money(r.budget, d.base, 0)})`).join(", ")}.</div>
+    <button class="sm" onclick="go('plan')">See the budget</button></div>` : "";
 
   const cush = d.cushion_months;
   $("#homeKpis").innerHTML =

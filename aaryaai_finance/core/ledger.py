@@ -27,6 +27,9 @@ DEFAULT_INCOME_CATEGORIES = ["Salary", "Bonus", "Interest", "Dividends", "Rent r
 DEFAULT_EXPENSE_CATEGORIES = ["Rent / Warmmiete", "Utilities & internet", "Groceries", "Transport", "Insurance", "Childcare & school",
                       "Eating out", "Shopping", "Travel", "Subscriptions", "Health", "Support to family",
                       "Loan / EMI", "Property payment", "Taxes & fees", "Investments / SIP", "Other"]
+# Categories the 50/30/20 check counts as "wants" (everything else in the budget is a need). Packs can add more
+# under categories.wants.
+DEFAULT_WANTS = ["Eating out", "Shopping", "Travel", "Subscriptions", "Other"]
 DEFAULT_ACCOUNT_TYPES = ["Current account", "Savings account", "Fixed deposit", "Credit card", "Broker / Depot", "Cash", "Loan", "Other"]
 
 
@@ -238,3 +241,24 @@ def monthly_actuals_period(db: DB, base: str, rates: dict, start: date, end: dat
             cats[t["category"] or "Other"] += v
     return {"months": 1, "count": n, "income": round(inc, 2), "expense": round(exp, 2),
             "by_category": {k: round(v, 2) for k, v in cats.items()}, "basis": "this month so far"}
+
+
+def budget_status(db: DB, base: str, rates: dict, today: date | None = None) -> dict:
+    """This month so far against the monthly budget lines, per category, in the base currency.
+    status: over (spent more than planned), full (exactly the budget, e.g. rent), near (90% or more), ok; plus categories you spent on without a budget line."""
+    today = today or date.today()
+    first = today.replace(day=1)
+    spent = monthly_actuals_period(db, base, rates, first, today)["by_category"]
+    lines: dict[str, float] = {}
+    for e in db.list("expenses"):
+        lines[e["category"]] = lines.get(e["category"], 0.0) + float(e["amount"] or 0)
+    days = calendar.monthrange(today.year, today.month)[1]
+    rows = []
+    for cat, budget in sorted(lines.items(), key=lambda x: -x[1]):
+        s = round(spent.get(cat, 0.0), 2)
+        share = s / budget if budget else None
+        status = ("over" if s > budget + 0.005 else "full" if s >= budget - 0.005 else "near" if share >= 0.9 else "ok") if budget else "ok"
+        rows.append({"category": cat, "budget": round(budget, 2), "spent": s, "left": round(budget - s, 2), "share": share, "status": status})
+    extra = [{"category": k, "spent": round(v, 2)} for k, v in sorted(spent.items(), key=lambda x: -x[1]) if k not in lines and v > 0]
+    return {"month": first.strftime("%Y-%m"), "base": base, "days_gone": today.day / days, "rows": rows, "unbudgeted": extra,
+            "budget_total": round(sum(lines.values()), 2), "spent_total": round(sum(spent.values()), 2)}

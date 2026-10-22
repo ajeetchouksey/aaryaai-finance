@@ -578,8 +578,10 @@ let EXP = [];
 const EXP_CATS = ["Rent / Warmmiete", "Utilities & internet", "Groceries", "Transport", "Insurance", "Childcare & school",
   "Eating out", "Shopping", "Travel", "Subscriptions", "Support to family", "Loan / EMI", "Other"];
 loaders.plan = async () => {
-  const [cf, exp] = await Promise.all([api("/calc/cashflow"), api("/api/expenses")]);
-  EXP = exp;
+  const [cf, exp, bs] = await Promise.all([api("/calc/cashflow"), api("/api/expenses"), api("/budget/status")]);
+  EXP = exp; WANTS = cf.wants || WANTS;
+  drawBudgetVsActual(bs);
+  $("#expCcy").textContent = cf.base;
   $("#cfKpis").innerHTML = kpi("Take-home", eur(cf.income), "per month") + kpi("Spending", eur(cf.spend), exp.length + " categories") +
     kpi("Saved", `<span class="${cf.savings >= 0 ? "pos" : "neg"}">${eur(cf.savings)}</span>`, `savings rate ${pct(cf.savings_rate, 0)} · aim 20%+`, meter(cf.savings_rate / .3)) +
     kpi("Emergency cover", cf.emergency_months + " mo", "cash ÷ monthly spending · aim 3–6", meter(cf.emergency_months / 6, css("--eur")));
@@ -590,16 +592,30 @@ loaders.plan = async () => {
   $("#flow").innerHTML = cf.income || exp.length ? `<div class="flowbar">${segs.map(([n, a, c]) => `<div style="flex-grow:${a};background:${c}" title="${esc(n)}: ${eur(a)}">${a / tot > .09 ? esc(n.split(" ")[0]) + " " + pct(a / tot, 0) : ""}</div>`).join("")}</div>
     <div class="flowlegend">${segs.map(([n, a, c]) => `<span><i style="background:${c}"></i>${esc(n)} <b class="num">${eur(a)}</b></span>`).join("")}</div>`
     : `<div class="empty">Add your take-home pay in Settings and your spending here to see where the money goes.</div>`;
-  $("#expTbl").innerHTML = `<thead><tr><th>Category</th><th class="n">€ / month</th><th class="n">Share</th></tr></thead><tbody>` +
+  const perMonth = `${cf.base} / month`;
+  $("#expTbl").innerHTML = `<thead><tr><th>Category</th><th class="n">${esc(perMonth)}</th><th class="n">Share</th></tr></thead><tbody>` +
     (sorted.map((e) => `<tr class="click" tabindex="0" onclick="editExpense(${e.id})"><td>${esc(e.category)}${e.note ? ` <span class="hint">${esc(e.note)}</span>` : ""}</td>
-      <td class="n" data-l="€ / month">${eur(e.amount)}</td><td class="n" data-l="Share">${cf.income ? pct(e.amount / cf.income, 0) : "—"}</td></tr>`).join("") ||
+      <td class="n" data-l="${esc(perMonth)}">${eur(e.amount)}</td><td class="n" data-l="Share">${cf.income ? pct(e.amount / cf.income, 0) : "—"}</td></tr>`).join("") ||
       `<tr><td colspan="3"><div class="empty">No spending yet.<br><button class="sm" onclick="editExpense()">＋ Add a category</button></div></td></tr>`) + "</tbody>";
   drawRule(cf, exp);
   $("#cfTips").innerHTML = (cf.tips.length ? cf.tips : ["Add income and spending to get suggestions."]).map((t) => `<li>${esc(t)}</li>`).join("");
   const act = cf.actuals || {};
   $("#cfSrc").innerHTML = "Take-home pay from: " + esc(cf.income_source) + (act.count ? ` · <b>Actual (Money tab, last ${act.months} months):</b> in ${eur(act.income)}/month, out ${eur(act.expense)}/month` : " · Log real income and spending in <b>Money</b>, or set a take-home figure in Settings → You.");
 };
-const WANTS = ["Eating out", "Shopping", "Travel", "Subscriptions", "Other"];
+let WANTS = ["Eating out", "Shopping", "Travel", "Subscriptions", "Other"];   // replaced by the server's list (packs can add to it)
+// Spent so far this month against each budget line; the marker shows how much of the month has gone.
+function drawBudgetVsActual(bs) {
+  const gone = Math.round(bs.days_gone * 100);
+  $("#bvaSub").textContent = bs.rows.length ? `${eur(bs.spent_total)} of ${eur(bs.budget_total)} · ${gone}% of the month gone` : "";
+  const tone = { over: "bad", full: "good", near: "warn", ok: "good" }, word = { over: "Over", full: "Used up", near: "Nearly used", ok: "On track" };
+  $("#bva").innerHTML = bs.rows.length ? `<div class="bva">${bs.rows.map((r) => `<div class="bva-row">
+      <div class="bva-name">${esc(r.category)}<small>${r.status === "over" ? `${eur(-r.left)} over` : `${eur(r.left)} left`}</small></div>
+      <div class="bva-track" role="img" aria-label="${esc(r.category)}: ${Math.round((r.share || 0) * 100)}% of the budget used">
+        <i class="${tone[r.status]}" style="width:${Math.min(r.share || 0, 1) * 100}%"></i><b style="left:${gone}%" title="${gone}% of the month gone"></b></div>
+      <div class="bva-val">${eur(r.spent)} <span class="hint">/ ${eur(r.budget)}</span> ${chip(word[r.status], tone[r.status])}</div></div>`).join("")}</div>
+    ${bs.unbudgeted.length ? `<p class="hint">Spent without a budget line: ${bs.unbudgeted.map((u) => `${esc(u.category)} ${eur(u.spent)}`).join(" · ")}</p>` : ""}`
+    : `<div class="empty">Add budget lines below to compare them with what you spend in Money.</div>`;
+}
 function drawRule(cf, exp) {
   if (!cf.income) { $("#rule").innerHTML = `<div class="empty">Set your take-home pay in Settings to see the check.</div>`; return; }
   const wants = exp.filter((e) => WANTS.includes(e.category)).reduce((a, e) => a + e.amount, 0);
