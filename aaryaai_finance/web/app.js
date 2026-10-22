@@ -30,8 +30,8 @@ const SYM = { EUR: "€", INR: "₹", USD: "$", GBP: "£", JPY: "¥", CHF: "CHF 
 let HIDE = false;
 try { HIDE = localStorage.getItem("afHideAmounts") === "1"; } catch (e) { }
 const MASK = "••••";
-const AMT_RE = /(?:[€₹$£]|\b(?:Rs\.?|EUR|INR|USD|GBP|CHF)\s?)\s?[-−]?\d[\d.,]*(?:\s?(?:k|M|L|Cr|lakh|crore)\b)?|\b\d[\d.,]*\s?(?:€|₹|EUR|INR|USD|lakh|crore|Cr\b)/g;
-const hideAmt = (t) => HIDE ? String(t ?? "").replace(AMT_RE, (m) => { const c = m.match(/[€₹$£]|Rs\.?|EUR|INR|USD|GBP|CHF/)?.[0] || ""; return /^[A-Z]/.test(c) ? (m.startsWith(c) ? c + " " + MASK : MASK + " " + c) : c + MASK; }) : t;
+const AMT_RE = /(?:[€₹$£¥]|S\$|\b(?:Rs\.?|EUR|INR|USD|GBP|CHF|SGD|AED|JPY|AUD|CAD)\s?)\s?[-−]?\d[\d.,]*(?:\s?(?:k|M|L|Cr|lakh|crore)\b)?|\b\d[\d.,]*\s?(?:€|₹|EUR|INR|USD|GBP|CHF|SGD|AED|JPY|lakh|crore|Cr\b)/g;
+const hideAmt = (t) => HIDE ? String(t ?? "").replace(AMT_RE, (m) => { const c = m.match(/S\$|[€₹$£¥]|Rs\.?|EUR|INR|USD|GBP|CHF|SGD|AED|JPY|AUD|CAD/)?.[0] || ""; return /^[A-Z]/.test(c) ? (m.startsWith(c) ? c + " " + MASK : MASK + " " + c) : c + MASK; }) : t;
 function money(v, c = BASE(), d) {
   if (HIDE) return (SYM[c || BASE()] ?? (c || BASE()) + " ") + MASK;
   return moneyRaw(v, c, d);
@@ -58,7 +58,9 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const jsArg = (v) => esc(JSON.stringify(String(v ?? "")));
 // Only https links from outside the app (e.g. the update notice) become clickable.
 const safeUrl = (u) => /^https:\/\//i.test(String(u || "")) ? esc(u) : "";
-const toast = (m) => { const t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.tm); toast.tm = setTimeout(() => t.classList.remove("show"), Math.max(2600, String(m).length * 55)); };
+// Units of a holding: with a public price they give the value away, so they are masked too.
+const units = (n) => HIDE ? "•••" : esc(n);
+const toast = (m) => { const t = $("#toast"); t.textContent = hideAmt(m); t.classList.add("show"); clearTimeout(toast.tm); toast.tm = setTimeout(() => t.classList.remove("show"), Math.max(2600, String(m).length * 55)); };
 const kpi = (l, v, s = "", extra = "") => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div>${extra}</div>`;
 const meter = (f, color) => `<div class="meter"><i style="width:${Math.max(0, Math.min(1, f)) * 100}%;${color ? "background:" + color : ""}"></i></div>`;
 const daysTo = (d) => Math.ceil((new Date(d) - new Date(new Date().toDateString())) / 864e5);
@@ -609,7 +611,7 @@ loaders.invest = async () => {
     alloc[x.asset_type] = (alloc[x.asset_type] || 0) + vb;
     const g = v - c;
     return `<tr class="click" onclick="editHolding(${x.id})"><td>${esc(x.name)}<div class="hint" style="font-weight:400">${esc(x.ticker || "no ticker")}${x.account ? " · " + esc(x.account) : ""}</div></td>
-      <td data-l="Type">${esc(x.asset_type)}</td><td class="n" data-l="Units">${x.qty}</td>
+      <td data-l="Type">${esc(x.asset_type)}</td><td class="n" data-l="Units">${units(x.qty)}</td>
       <td class="n" data-l="Price">${money(px, x.currency)}<div class="hint">${esc(x.price_date || "manual")}</div></td><td class="n" data-l="Value">${money(v, x.currency)}</td>
       <td class="n ${g >= 0 ? "pos" : "neg"}" data-l="Gain">${g >= 0 ? "+" : ""}${money(g, x.currency)}<div class="hint">${c ? pct(g / c) : ""}</div></td></tr>`;
   });
@@ -683,10 +685,10 @@ loaders.learn = async () => {
     kpi("Pretend cash", eur(p.cash, 2), "", meter(p.cash / p.start, css("--eur"))) + kpi("Realised profit", eur(p.realized_pnl, 2), "from sells");
   const pos = Object.entries(p.positions);
   $("#paperPos").innerHTML = `<thead><tr><th>Ticker</th><th class="n">Units</th><th class="n">Avg cost</th><th class="n">Price</th><th class="n">Value</th><th class="n">Unrealised</th></tr></thead><tbody>` +
-    (pos.map(([t, x]) => `<tr><td>${esc(t)}</td><td class="n" data-l="Units">${x.qty}</td><td class="n" data-l="Avg cost">${x.avg_cost}</td><td class="n" data-l="Price">${x.price}</td><td class="n" data-l="Value">${eur(x.value, 2)}</td>
+    (pos.map(([t, x]) => `<tr><td>${esc(t)}</td><td class="n" data-l="Units">${units(x.qty)}</td><td class="n" data-l="Avg cost">${x.avg_cost}</td><td class="n" data-l="Price">${x.price}</td><td class="n" data-l="Value">${eur(x.value, 2)}</td>
       <td class="n ${x.unrealized >= 0 ? "pos" : "neg"}" data-l="Unrealised">${eur(x.unrealized, 2)}</td></tr>`).join("") || `<tr><td colspan="6"><div class="empty">No positions. Try buying a few units of an ETF.</div></td></tr>`) + "</tbody>";
   $("#paperHist").innerHTML = `<thead><tr><th>When</th><th>Side</th><th>Ticker</th><th class="n">Units</th><th class="n">Price</th><th></th></tr></thead><tbody>` +
-    p.trades.slice().reverse().map((t) => `<tr><td>${esc(t.ts.replace("T", " "))}</td><td data-l="Side">${esc(t.side)}</td><td data-l="Ticker">${esc(t.ticker)}</td><td class="n" data-l="Units">${esc(t.qty)}</td><td class="n" data-l="Price">${esc(t.price)}</td>
+    p.trades.slice().reverse().map((t) => `<tr><td>${esc(t.ts.replace("T", " "))}</td><td data-l="Side">${esc(t.side)}</td><td data-l="Ticker">${esc(t.ticker)}</td><td class="n" data-l="Units">${units(t.qty)}</td><td class="n" data-l="Price">${esc(t.price)}</td>
       <td data-l=""><button class="link" onclick="delTrade(${t.id})">undo</button></td></tr>`).join("") + "</tbody>";
 };
 $("#paperForm").onsubmit = async (e) => {
@@ -991,7 +993,7 @@ window.openChat = async (id) => {
   $("#msgs").innerHTML = c.messages.map((m) => m.role === "user" ? userMsg(m.text) : aiMsg(m.text, m.tools, m.proposals)).join("");
   scrollDown(true); drawChatList();
 };
-const userMsg = (t) => `<div class="msg user"><div class="bub">${esc(t)}</div></div>`;
+const userMsg = (t) => `<div class="msg user"><div class="bub">${esc(hideAmt(t))}</div></div>`;
 const aiMsg = (t, tools = [], props = []) => `<div class="msg ai"><div class="ai-ico">✦</div><div class="ai-body">
   ${tools.length ? `<div class="chips">${[...new Set(tools)].map((x) => `<span class="chip done">${esc(x)}</span>`).join("")}</div>` : ""}${md(t)}${props.map(aiProp).join("")}</div></div>`;
 // A change the assistant suggested: nothing is saved until the person approves it here or on Routines.
@@ -1289,7 +1291,7 @@ function drawQueueCard(id, a) {
       <label>Category <select data-f="category">${DOCS.meta.categories.map((x) => `<option ${x === a.category ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></label>
       <label>Folder <input data-f="folder" list="fl-${id}" value="${esc(a.folder)}"><datalist id="fl-${id}">${folders.map((x) => `<option value="${esc(x)}">`).join("")}</datalist></label>
       <label>File name <input data-f="filename" value="${esc(a.filename)}"></label></div>
-    ${a.excerpt ? `<details><summary class="hint">What I read</summary><div class="excerpt">${esc(a.excerpt)}</div></details>` : ""}
+    ${a.excerpt ? `<details><summary class="hint">What I read</summary><div class="excerpt">${esc(hideAmt(a.excerpt))}</div></details>` : ""}
     <div class="qacts"><button class="sm" data-act="file">File it</button>
       ${F.amount ? `<button class="sm ghost" data-act="filetx">File + log as expense</button>` : ""}
       <button class="sm ghost" data-act="skip">Discard</button><span class="okline"></span></div></div>`;
