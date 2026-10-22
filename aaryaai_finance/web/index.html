@@ -145,12 +145,12 @@
     </aside>
     <div class="chatmain">
       <button class="sidetoggle sm ghost" onclick="document.getElementById('chatSide').classList.toggle('open')">☰ Chats</button>
-      <div class="msgs" id="msgs"></div>
+      <div class="msgs" id="msgs" role="log" aria-live="polite" aria-label="Conversation"></div>
       <form class="composer" id="composer">
         <textarea id="prompt" rows="1" placeholder="Ask about your money, taxes or goals…" aria-label="Message"></textarea>
         <div class="composer-bar">
           <select id="modelPick" title="Model" aria-label="Model"></select>
-          <span class="muted small" id="chatStatus"></span>
+          <span class="muted small" id="chatStatus" aria-live="polite"></span>
           <button id="sendBtn" class="send" title="Send (Enter)" aria-label="Send">↑</button>
         </div>
       </form>
@@ -215,7 +215,7 @@
           <label class="rep-only">Until (optional) <input name="end_date" type="date"></label>
           <label>Note <input name="note" placeholder="e.g. REWE, school fees, SIP"></label>
           <button id="txSubmit">Add expense</button></form>
-        <p class="err" id="txErr"></p></div>
+        <p class="err" id="txErr" role="alert"></p></div>
       <div class="card"><h3>Repeating <span class="sub">written in automatically</span></h3><div id="recList"></div></div>
     </aside>
   </div>
@@ -234,7 +234,7 @@
       <div class="chips-filter" id="libCats"></div><table id="libTbl" class="rt"></table></div>
     <div class="card"><h3>Folder check <span class="sub">spots misfiled documents</span></h3>
       <p class="hint" style="margin-top:-4px">Reads every document in your planner folder and flags any that look like they belong somewhere else.</p>
-      <button class="sm" id="reviewBtn">Check my folders</button><div id="reviewOut" style="margin-top:12px"></div></div>
+      <button class="sm" id="reviewBtn">Check my folders</button><div id="reviewOut" aria-live="polite" style="margin-top:12px"></div></div>
   </div>
 </section>
 
@@ -284,7 +284,7 @@
     <span style="display:flex;gap:8px"><button class="sm ghost" onclick="refreshPrices()">↻ Refresh prices</button><button class="sm" onclick="editHolding()">＋ Add holding</button></span></div>
   <div class="kpis" id="invKpis"></div>
   <div class="grid g-hero">
-    <div class="card"><h3>Holdings</h3><table id="holdTbl" class="rt"></table><p class="hint" id="refreshMsg"></p></div>
+    <div class="card"><h3>Holdings</h3><table id="holdTbl" class="rt"></table><p class="hint" id="refreshMsg" aria-live="polite"></p></div>
     <div class="card"><h3>Allocation</h3><div class="chartbox"><canvas id="chAlloc"></canvas></div></div>
   </div>
   <div class="card"><h3>Rules of thumb</h3>
@@ -318,14 +318,14 @@
         <label>Or upload a prices CSV <input name="file" type="file" accept=".csv"></label>
         <button>Run backtest</button></form>
       <p class="hint">DEMO uses made-up prices and works offline.</p></div>
-    <div class="card"><h3>Result</h3><div id="btOut" class="empty">Run a backtest to compare the rule with simply holding.</div><div class="chartbox short" style="margin-top:12px"><canvas id="chBt"></canvas></div></div>
+    <div class="card"><h3>Result</h3><div id="btOut" aria-live="polite" class="empty">Run a backtest to compare the rule with simply holding.</div><div class="chartbox short" style="margin-top:12px"><canvas id="chBt"></canvas></div></div>
   </div>
   <div class="grid g2">
     <div class="card"><h3>Monthly Sparplan (SIP)</h3>
       <form id="sipForm" class="form"><div class="row2"><label>Ticker <input name="ticker" value="DEMO"></label>
         <label>Years <input name="years" type="number" value="10"></label></div>
         <label>Monthly amount <input name="monthly" type="number" value="500"></label><button>Simulate</button></form>
-      <div id="sipOut"></div></div>
+      <div id="sipOut" aria-live="polite"></div></div>
     <div class="card"><h3>How a Sparplan grows</h3><div class="chartbox"><canvas id="chSip"></canvas></div></div>
   </div>
   <div class="card"><h3>Paper account <span class="sub">fake money</span></h3>
@@ -337,7 +337,7 @@
       <label>Price <a href="#" onclick="getQuote(event)" style="font-size:12px">get live price</a><input name="price" type="number" step="any" required></label>
       <label>Fee <input name="fee" type="number" step="any" value="1"></label>
       <button>Place pretend order</button></form>
-    <p class="err" id="paperErr"></p>
+    <p class="err" id="paperErr" role="alert"></p>
     <table id="paperPos" class="rt"></table>
     <details style="margin-top:10px"><summary>Trade history</summary><table id="paperHist" class="rt"></table></details></div>
 </section>
@@ -361,11 +361,11 @@
   <div class="grid g2">
     <div class="card"><h3>Test a document <span class="sub">see which rules match and why</span></h3>
       <label class="drop small" id="ruleDrop"><input type="file" id="ruleFile"><b>Drop a file to test</b><span>Nothing is saved</span></label>
-      <div id="ruleTestOut"></div></div>
+      <div id="ruleTestOut" aria-live="polite"></div></div>
     <div class="card"><h3>Your rules <span class="sub" id="rulesDir"></span></h3>
       <p class="hint" style="margin-top:-6px">Your rules are checked before the country packs; a rule with the same id replaces the pack's. See the examples below or CONTRIBUTING.md.</p>
       <textarea id="userRules" class="code" rows="16" spellcheck="false"></textarea>
-      <div style="display:flex;gap:8px;margin-top:8px;align-items:center"><button class="sm" id="saveRules">Save &amp; apply</button><button class="sm ghost" id="exampleRules">Insert an example</button><span id="rulesMsg" class="hint"></span></div></div>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center"><button class="sm" id="saveRules">Save &amp; apply</button><button class="sm ghost" id="exampleRules">Insert an example</button><span id="rulesMsg" aria-live="polite" class="hint"></span></div></div>
   </div>
   <div class="card"><h3>Document rules <span class="sub" id="docRuleCount"></span></h3><table id="docRules" class="rt"></table></div>
   <div class="card"><h3>Deadline rules</h3><table id="dlRules" class="rt"></table></div>
@@ -377,11 +377,11 @@
     <button class="sm ghost" onclick="openWizard()">Run setup again</button></div>
   <div class="grid g2">
     <div class="card"><h3>You &amp; your countries</h3><form id="setGeneral" class="form"></form></div>
-    <div class="card"><h3>Currencies</h3><form id="setFx" class="form"></form><p class="hint" id="fxMsg"></p></div>
+    <div class="card"><h3>Currencies</h3><form id="setFx" class="form"></form><p class="hint" id="fxMsg" aria-live="polite"></p></div>
   </div>
   <div class="grid g2">
     <div class="card"><h3>Documents folder</h3><form id="setDocs" class="form"></form></div>
-    <div class="card"><h3>✦ AI assistant <span class="sub">optional</span></h3><form id="setAI" class="form"></form><p class="hint" id="aiMsg"></p></div>
+    <div class="card"><h3>✦ AI assistant <span class="sub">optional</span></h3><form id="setAI" class="form"></form><p class="hint" id="aiMsg" aria-live="polite"></p></div>
   </div>
   <div class="grid g2">
     <div class="card"><h3>Your data</h3><div id="setData"></div></div>
@@ -396,7 +396,7 @@
   <div class="wiz-card">
     <div class="wiz-head"><span class="mark"></span><div><b>aaryaai finance</b><small>Set up in four steps · everything stays on this computer</small></div><div class="wiz-steps" id="wizSteps"></div></div>
     <div id="wizBody"></div>
-    <div class="wiz-foot"><button class="ghost" id="wizBack">Back</button><span class="err" id="wizErr"></span><button id="wizNext">Next</button></div>
+    <div class="wiz-foot"><button class="ghost" id="wizBack">Back</button><span class="err" id="wizErr" role="alert"></span><button id="wizNext">Next</button></div>
   </div>
 </div>
 

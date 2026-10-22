@@ -15,7 +15,7 @@ const api = async (url, opts = {}) => {
   const r = await fetch(url, { ...opts, headers: HDRS(), body: opts.body ? JSON.stringify(opts.body) : undefined });
   const j = await r.json().catch(() => ({}));
   if (sessionExpired(r)) throw new Error("The app was restarted — reloading…");
-  if (!r.ok) throw new Error(j.detail || r.statusText);
+  if (!r.ok) throw new Error(Array.isArray(j.detail) ? j.detail.map((d) => d.msg || String(d)).join("; ") : (j.detail || r.statusText));
   try { sessionStorage.removeItem("afReloaded"); } catch (e) { }
   return j;
 };
@@ -129,14 +129,39 @@ window.toggleHide = () => setHide(!HIDE);
 $$(".hidebtn").forEach((b) => b.onclick = toggleHide);
 document.addEventListener("keydown", (e) => { if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyH") { e.preventDefault(); toggleHide(); } });
 setHide(HIDE, true);
-$$("#tabs button").forEach((b) => b.onclick = () => {
-  $$("#tabs button").forEach((x) => x.classList.toggle("on", x === b));
-  $$(".tab").forEach((t) => t.classList.toggle("on", t.id === b.dataset.tab));
-  history.replaceState(null, "", "#" + b.dataset.tab); scrollTo({ top: 0 });
-  b.scrollIntoView({ block: "nearest", inline: "center" });
-  loaders[b.dataset.tab]?.();
-  loadFx();
+$$("#tabs button").forEach((b) => {
+  b.setAttribute("aria-label", $("span", b)?.textContent.trim() || b.dataset.tab);   // the label text is hidden on narrow screens
+  $$("svg", b).forEach((s) => s.setAttribute("aria-hidden", "true"));
+  b.onclick = () => {
+    $$("#tabs button").forEach((x) => { x.classList.toggle("on", x === b); x.toggleAttribute("aria-current", x === b); if (x === b) x.setAttribute("aria-current", "page"); });
+    $$(".tab").forEach((t) => t.classList.toggle("on", t.id === b.dataset.tab));
+    history.replaceState(null, "", "#" + b.dataset.tab); scrollTo({ top: 0 });
+    b.scrollIntoView({ block: "nearest", inline: "center" });
+    loadTab(b.dataset.tab);
+    loadFx();
+  };
 });
+// A screen that fails to load says so, with a way to try again, instead of staying blank.
+function loadTab(tab) {
+  const sec = $("section#" + tab);
+  $$(".tab-error", sec || document).forEach((e) => e.remove());
+  Promise.resolve().then(() => loaders[tab]?.()).catch((e) => {
+    if (!sec) return;
+    sec.insertAdjacentHTML("afterbegin", `<div class="banner bad tab-error" role="alert"><div>Couldn't load this screen: ${esc(e.message || e)}</div>
+      <button class="sm" type="button" onclick="loadTab(${jsArg(tab)})">Try again</button></div>`);
+  });
+}
+window.loadTab = loadTab;
+// Any other failed action (a save, a delete…) tells you instead of failing silently.
+window.addEventListener("unhandledrejection", (e) => { const m = e.reason?.message || String(e.reason || ""); if (m) toast(m); });
+// Rows and cards that open something with a click also open with Enter or Space.
+document.addEventListener("keydown", (e) => {
+  const t = e.target;
+  if ((e.key === "Enter" || e.key === " ") && t.matches?.("tr.click[tabindex], .acct[tabindex], .ci[tabindex]") && !e.isComposing) { e.preventDefault(); t.click(); }
+});
+// "Today" in your own time zone (toISOString() is UTC, which is yesterday for part of the night in India or Germany).
+const todayISO = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const sure = (what) => confirm(what);
 
 
 // ---------------- generic edit dialog ----------------
@@ -155,7 +180,7 @@ function dialog(title, fields, row, onSave, onDelete) {
     <span style="display:flex;gap:6px"><button type="button" class="ghost" id="dlgCancel">Cancel</button><button>Save</button></span></div>`;
   const d = $("#dlg"); d.showModal();
   $("#dlgCancel").onclick = () => d.close();
-  if ($("#dlgDel")) $("#dlgDel").onclick = async () => { await onDelete(row.id); d.close(); toast("Deleted"); };
+  if ($("#dlgDel")) $("#dlgDel").onclick = async () => { if (!sure("Delete this for good?")) return; try { await onDelete(row.id); d.close(); toast("Deleted"); } catch (err) { toast(err.message); } };
   f.onsubmit = async (e) => {
     e.preventDefault();
     const out = { ...row };
@@ -203,7 +228,7 @@ window.openRecords = async (entity) => {
   $("#recordsCard").hidden = false;
   $("#recTitle").innerHTML = `${esc(ent.label)} <span class="hint" style="font-size:13px">${rows.length} · defined in ${esc(ent.source)}</span>`;
   $("#setRecords").innerHTML = `<div class="tablewrap"><table><thead><tr>${cols.map(([k, f]) => `<th>${esc(f.label || k)}</th>`).join("")}</tr></thead><tbody>
-    ${rows.map((r) => `<tr class="click" onclick="editRecord(${jsArg(entity)}, ${Number(r.id)})">${cols.map(([k, f]) => `<td>${show(f, r[k])}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${cols.length}" class="hint">Nothing yet.</td></tr>`}</tbody></table></div>
+    ${rows.map((r) => `<tr class="click" tabindex="0" onclick="editRecord(${jsArg(entity)}, ${Number(r.id)})">${cols.map(([k, f]) => `<td>${show(f, r[k])}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${cols.length}" class="hint">Nothing yet.</td></tr>`}</tbody></table></div>
     <div style="display:flex;gap:8px;margin-top:10px"><button class="sm" onclick="editRecord(${jsArg(entity)})">＋ Add ${esc(ent.label.toLowerCase())}</button><button class="sm ghost" onclick="$('#recordsCard').hidden=true">Close</button></div>`;
   window._recs = { entity, rows, refs };
   $("#recordsCard").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -405,7 +430,7 @@ loaders.position = async () => {
   else { charts.chCat?.destroy(); delete charts.chCat; $("#chCat").insertAdjacentHTML("afterend", `<div class="empty" id="chCatEmpty">Add an account, asset or holding and this shows how your money is split.</div>`); }
   drawOutlook(hist, n.net_worth, cf?.savings || 0);
   $("#itemsTbl").innerHTML = `<thead><tr><th>Name</th><th>Type</th><th class="n">Amount</th><th>Liquid</th><th>Updated</th></tr></thead><tbody>` +
-    (items.map((i) => `<tr class="click" onclick="editItem(${i.id})"><td>${esc(i.name)}${i.note ? `<div class="hint" style="font-weight:400">${esc(i.note)}</div>` : ""}</td>
+    (items.map((i) => `<tr class="click" tabindex="0" onclick="editItem(${i.id})"><td>${esc(i.name)}${i.note ? `<div class="hint" style="font-weight:400">${esc(i.note)}</div>` : ""}</td>
       <td data-l="Type">${i.kind === "liability" ? "▼ " : ""}${esc(i.category)}</td><td class="n" data-l="Amount">${money(i.amount, i.currency)}<span class="cur" style="background:${ccyColor(i.currency)}22;color:${ccyColor(i.currency)}">${esc(i.currency)}</span></td>
       <td data-l="Liquid">${i.liquid ? "✓" : "—"}</td><td class="muted" data-l="Updated">${esc(i.updated || "")}</td></tr>`).join("") ||
       `<tr><td colspan="5"><div class="empty">Property, pensions, cars, loans… anything that isn't a bank account.<br><button class="sm" onclick="editItem()">＋ Add an asset or debt</button></div></td></tr>`) + "</tbody>";
@@ -564,7 +589,7 @@ loaders.plan = async () => {
     <div class="flowlegend">${segs.map(([n, a, c]) => `<span><i style="background:${c}"></i>${esc(n)} <b class="num">${eur(a)}</b></span>`).join("")}</div>`
     : `<div class="empty">Add your take-home pay in Settings and your spending here to see where the money goes.</div>`;
   $("#expTbl").innerHTML = `<thead><tr><th>Category</th><th class="n">€ / month</th><th class="n">Share</th></tr></thead><tbody>` +
-    (sorted.map((e) => `<tr class="click" onclick="editExpense(${e.id})"><td>${esc(e.category)}${e.note ? ` <span class="hint">${esc(e.note)}</span>` : ""}</td>
+    (sorted.map((e) => `<tr class="click" tabindex="0" onclick="editExpense(${e.id})"><td>${esc(e.category)}${e.note ? ` <span class="hint">${esc(e.note)}</span>` : ""}</td>
       <td class="n" data-l="€ / month">${eur(e.amount)}</td><td class="n" data-l="Share">${cf.income ? pct(e.amount / cf.income, 0) : "—"}</td></tr>`).join("") ||
       `<tr><td colspan="3"><div class="empty">No spending yet.<br><button class="sm" onclick="editExpense()">＋ Add a category</button></div></td></tr>`) + "</tbody>";
   drawRule(cf, exp);
@@ -608,7 +633,7 @@ loaders.invest = async () => {
     const vb = conv(v, x.currency) ?? v, cb = conv(c, x.currency) ?? c; val += vb; cost += cb;
     alloc[x.asset_type] = (alloc[x.asset_type] || 0) + vb;
     const g = v - c;
-    return `<tr class="click" onclick="editHolding(${x.id})"><td>${esc(x.name)}<div class="hint" style="font-weight:400">${esc(x.ticker || "no ticker")}${x.account ? " · " + esc(x.account) : ""}</div></td>
+    return `<tr class="click" tabindex="0" onclick="editHolding(${x.id})"><td>${esc(x.name)}<div class="hint" style="font-weight:400">${esc(x.ticker || "no ticker")}${x.account ? " · " + esc(x.account) : ""}</div></td>
       <td data-l="Type">${esc(x.asset_type)}</td><td class="n" data-l="Units">${x.qty}</td>
       <td class="n" data-l="Price">${money(px, x.currency)}<div class="hint">${esc(x.price_date || "manual")}</div></td><td class="n" data-l="Value">${money(v, x.currency)}</td>
       <td class="n ${g >= 0 ? "pos" : "neg"}" data-l="Gain">${g >= 0 ? "+" : ""}${money(g, x.currency)}<div class="hint">${c ? pct(g / c) : ""}</div></td></tr>`;
@@ -700,7 +725,7 @@ window.getQuote = async (e) => {
   try { const q = await api("/calc/quote/" + encodeURIComponent(f.ticker.value.trim())); f.price.value = q.price; }
   catch (err) { $("#paperErr").textContent = err.message; }
 };
-window.delTrade = async (id) => { await api("/api/paper_trades/" + id, { method: "DELETE" }); loaders.learn(); };
+window.delTrade = async (id) => { if (!sure("Undo this paper trade?")) return; await api("/api/paper_trades/" + id, { method: "DELETE" }); loaders.learn(); };
 
 
 // ---------------- TAX (from country packs) ----------------
@@ -751,7 +776,7 @@ window.toggleCal = async (key, status) => {
 window.addDeadline = () => dialog("Add your own deadline", [["title", "What needs doing"], ["due", "Due date", "date"],
   ["country", "Country", "select", ["", ...(CFG.countries || [])]], ["severity", "Importance", "select", ["normal", "high", "critical"]], ["detail", "Details / how", "textarea"]],
   { severity: "normal" }, async (r) => { await api("/api/calendar", { method: "POST", body: r }); loaders.tax(); });
-window.delDeadline = async (id) => { await api("/api/calendar/" + id, { method: "DELETE" }); loaders.tax(); };
+window.delDeadline = async (id) => { if (!sure("Delete this deadline?")) return; await api("/api/calendar/" + id, { method: "DELETE" }); loaders.tax(); };
 
 // ---------------- RULES ----------------
 const RULE_EXAMPLE = `# Your own rules — checked before the country packs. Same id as a pack rule = replace it.
@@ -897,7 +922,7 @@ loaders.settings = async () => {
     ${problems.length ? `<ul class="probs">${problems.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>` : `<p class="okline">✓ All packs, rules and the model check out.</p>`}
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
       <a class="btn sm" href="${withToken("/data/export")}" download>Export everything (JSON)</a>
-      <label class="btn sm ghost" style="cursor:pointer">Import from JSON…<input type="file" id="importFile" accept=".json,application/json" hidden></label>
+      <label class="btn sm ghost" style="cursor:pointer">Import from JSON…<input type="file" id="importFile" accept=".json,application/json" class="vh"></label>
       <button class="sm ghost" onclick="openWizard()">Use a different data folder</button></div>
     ${userEnts.length ? `<p style="margin:12px 0 4px"><b>Your record types</b></p><div style="display:flex;gap:6px;flex-wrap:wrap">${userEnts.map(([k, e]) => `<button class="sm ghost" onclick="openRecords(${jsArg(k)})">${esc(e.label)}</button>`).join("")}</div>` : ""}`;
   $("#updChk").onchange = async (e) => { await api("/config", { method: "POST", body: { updates: { check: e.target.checked } } }); toast(e.target.checked ? "Update checks on" : "Update checks off"); };
@@ -959,12 +984,12 @@ loaders.chat = async () => {
 };
 async function drawChatList() {
   const list = await api("/chat/list");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   let last = "";
   $("#chatList").innerHTML = list.map((c) => {
     const d = (c.updated || "").slice(0, 10), label = d === today ? "Today" : d;
     const head = label !== last ? `<div class="day">${label}</div>` : ""; last = label;
-    return head + `<div class="ci ${c.id === CHAT_ID ? "on" : ""}" onclick="openChat(${c.id})"><span title="${esc(hideAmt(c.title))}">${esc(hideAmt(c.title))}</span>
+    return head + `<div class="ci ${c.id === CHAT_ID ? "on" : ""}" tabindex="0" onclick="openChat(${c.id})"><span title="${esc(hideAmt(c.title))}">${esc(hideAmt(c.title))}</span>
       <button onclick="event.stopPropagation();delChat(${c.id})" title="Delete chat" aria-label="Delete chat">✕</button></div>`;
   }).join("") || `<p class="hint" style="padding:4px 8px">Your conversations will appear here.</p>`;
 }
@@ -1048,7 +1073,7 @@ $("#modelPick").onchange = async (e) => { META = await api("/chat/model", { meth
 const CAT_ICON = { "Salary": "💼", "Bonus": "🎯", "Interest": "🏦", "Dividends": "📈", "Rent received": "🏠", "Tax refund": "🧾", "Gift": "🎁", "Sale of asset": "🔁", "Other income": "➕",
   "Rent / Warmmiete": "🏠", "Utilities & internet": "💡", "Groceries": "🛒", "Transport": "🚆", "Insurance": "🛡️", "Childcare & school": "🎒", "Eating out": "🍽️", "Shopping": "🛍️",
   "Travel": "✈️", "Subscriptions": "🔁", "Health": "🩺", "Support to family": "🤝", "Loan / EMI": "🏦", "Property payment": "🏗️", "Taxes & fees": "🧾", "Investments / SIP": "🌱", "Other": "•" };
-const MONEY = { ccy: "", period: "month", anchor: new Date().toISOString().slice(0, 10), account: "", kind: "expense", meta: null, accts: [] };
+const MONEY = { ccy: "", period: "month", anchor: todayISO(), account: "", kind: "expense", meta: null, accts: [] };
 try { MONEY.ccy = localStorage.getItem("fm-ccy") || ""; } catch (e) { }
 const fmtC = (v, c) => money(v, c);
 const shiftAnchor = (dir) => {
@@ -1057,7 +1082,7 @@ const shiftAnchor = (dir) => {
   else if (MONEY.period === "week") d.setDate(d.getDate() + 7 * dir);
   else if (MONEY.period === "month") d.setMonth(d.getMonth() + dir, 1);
   else d.setFullYear(d.getFullYear() + dir);
-  MONEY.anchor = d.toISOString().slice(0, 10);
+  MONEY.anchor = todayISO(d);
 };
 function periodLabel(s) {
   const a = new Date(s.start), b = new Date(s.end);
@@ -1098,7 +1123,7 @@ loaders.money = async () => {
   const keepA = f.account_id.value, keepT = f.to_account_id.value;
   f.account_id.innerHTML = opts || `<option value="">Add an account first</option>`; f.to_account_id.innerHTML = opts;
   if (keepA) f.account_id.value = keepA; if (keepT) f.to_account_id.value = keepT;
-  if (!f.date.value) f.date.value = new Date().toISOString().slice(0, 10);
+  if (!f.date.value) f.date.value = todayISO();
   setKind(MONEY.kind, true);
   // kpis
   $("#perLabel").textContent = periodLabel(sum);
@@ -1145,12 +1170,12 @@ function drawRecurring(list) {
   }).join("") || `<p class="hint" style="margin:0">Salary, rent, SIPs, insurance… set "Repeats" when adding an entry and it's logged for you each time.</p>`;
 }
 window.pickAccount = (id) => { MONEY.account = String(MONEY.account) === String(id) ? "" : String(id); loaders.money(); };
-window.delTx = async (id) => { await api("/api/transactions/" + id, { method: "DELETE" }); toast("Entry deleted"); loaders.money(); };
+window.delTx = async (id) => { if (!sure("Remove this entry?")) return; await api("/api/transactions/" + id, { method: "DELETE" }); toast("Entry deleted"); loaders.money(); };
 window.toggleRec = async (id) => { const r = (await api("/api/recurring")).find((x) => x.id === id); r.active = r.active ? 0 : 1; await api("/api/recurring", { method: "POST", body: r }); toast(r.active ? "Resumed" : "Paused"); loaders.money(); };
-window.delRec = async (id) => { await api("/api/recurring/" + id, { method: "DELETE" }); toast("Repeating entry removed — past entries are kept"); loaders.money(); };
+window.delRec = async (id) => { if (!sure("Stop this repeating entry? Past entries are kept.")) return; await api("/api/recurring/" + id, { method: "DELETE" }); toast("Repeating entry removed — past entries are kept"); loaders.money(); };
 window.editAccount = (id, country) => {
   const pk = packFor(country) || CFG.packs[0] || {};
-  const row = MONEY.accts.find((a) => a.id === id) || { country: pk.code || "", currency: pk.currency || BASE(), type: MONEY.meta.account_types[0], opening_balance: 0, opening_date: new Date().toISOString().slice(0, 10), liquid: 1, in_networth: 1 };
+  const row = MONEY.accts.find((a) => a.id === id) || { country: pk.code || "", currency: pk.currency || BASE(), type: MONEY.meta.account_types[0], opening_balance: 0, opening_date: todayISO(), liquid: 1, in_networth: 1 };
   dialog(id ? "Edit account" : `Add ${pk.flag || ""} ${esc(pk.name || "")} account`, [["name", "Account name (e.g. Main current account)"], ["institution", "Bank / broker"],
     ["country", "Country", "select", ["", ...(CFG.countries || [])]], ["currency", "Currency", "select", CFG.currencies], ["type", "Type", "select", MONEY.meta.account_types],
     ["opening_balance", "Balance on the start date", "number"], ["opening_date", "Start date", "date"],
@@ -1317,7 +1342,7 @@ addEventListener("resize", () => {
   if (!st.configured) { openWizard(); return; }
   await loadConfig();
   const start = location.hash.slice(1) || "home";
-  ($(`#tabs button[data-tab="${start}"]`) || $("#tabs button")).click();
+  ($(`#tabs button[data-tab="${CSS.escape(start)}"]`) || $("#tabs button")).click();
   setTimeout(checkUpdate, 1500);
 })();
 
