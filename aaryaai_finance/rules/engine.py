@@ -47,9 +47,19 @@ DEFAULT_CATEGORIES = ["Salary & payslips", "Tax", "Property", "Bank statements",
 
 
 # ------------------------------------------------------------------ text
+MAX_UNZIPPED = 100 * 1024 * 1024    # .docx / .xlsx are zip files; refuse ones that would unpack to more than this
+
+
+def _zip_too_big(data: bytes) -> bool:
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        return sum(i.file_size for i in z.infolist()) > MAX_UNZIPPED
+
+
 def extract_text(data: bytes, filename: str, max_pages: int = 6) -> tuple[str, str]:
     ext = Path(filename).suffix.lower()
     try:
+        if ext in (".docx", ".xlsx") and _zip_too_big(data):
+            return "", "too large to read (unpacks to over 100 MB)"
         if ext == ".pdf":
             import pdfplumber
             with pdfplumber.open(io.BytesIO(data)) as pdf:
@@ -80,10 +90,11 @@ def squash(s: str) -> str:
 
 
 def _to_float(s: str) -> float | None:
+    """A number written the German (68.400,00), English (68,400.00) or Indian (1,20,000) way; "12,50" is 12.5."""
     s = s.strip().replace("₹", "").replace("€", "").replace("Rs.", "").replace("Rs", "").strip()
     if re.fullmatch(r"-?\d{1,3}(\.\d{3})+(,\d{1,2})?", s):
         s = s.replace(".", "").replace(",", ".")
-    elif re.fullmatch(r"-?\d{1,3}(,\d{2,3})+(\.\d{1,2})?", s):
+    elif re.fullmatch(r"-?\d{1,3}(,\d{2,3})*,\d{3}(\.\d{1,2})?", s):      # thousands groups always end in three digits
         s = s.replace(",", "")
     elif re.fullmatch(r"-?\d+,\d{1,2}", s):
         s = s.replace(",", ".")
@@ -362,13 +373,60 @@ def validate_rules_yaml(text: str) -> list[str]:
     for i, r in enumerate(d.get("deadlines", []) or []):
         if not isinstance(r, dict) or not r.get("id") or not r.get("title") or not r.get("due"):
             errs.append(f"deadlines[{i}] needs id, title and due")
+    from ..core.importer import check_profile
+    for p in d.get("import_profiles", []) or []:
+        errs += check_profile(p)
+    from ..core.categorize import check_category_rule
+    for r in d.get("category_rules", []) or []:
+        errs += check_category_rule(r)
     return errs
+
+
+def _load_section(folder: Path, packs: dict, key: str, check) -> tuple[list, list]:
+    """One kind of rule (`key:`) from your rules files first (same id replaces a pack's), then each switched-on pack.
+    A rule that fails `check` is skipped and reported."""
+    found, errs = [], []
+    if folder and folder.exists():
+        for p in sorted(folder.glob("*.y*ml")):
+            try:
+                d = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+            except Exception:  # noqa: BLE001 — already reported by load_yaml_rules
+                continue
+            found += [{**r, "_source": f"yours · {p.name}"} for r in (d.get(key) or []) if isinstance(r, dict)]
+    for code, pk in packs.items():
+        found += [{**r, "country": r.get("country", code), "_source": f"{pk.get('flag', '')} {pk.get('name', code)} pack"}
+                  for r in (pk.get(key) or []) if isinstance(r, dict)]
+    seen, out = set(), []
+    for r in found:
+        bad = check(r)
+        if bad:
+            errs += [f"{r.get('_source', '')}: {e}" for e in bad]
+        elif r["id"] not in seen:
+            seen.add(r["id"])
+            out.append(r)
+    return out, errs
+
+
+def load_import_profiles(folder: Path, packs: dict) -> tuple[list, list]:
+    """Bank-statement profiles, then the built-in generic one."""
+    from ..core.importer import GENERIC, check_profile
+    out, errs = _load_section(folder, packs, "import_profiles", check_profile)
+    have = {p["id"] for p in out}
+    return out + [g for g in GENERIC if g["id"] not in have], errs
+
+
+def load_category_rules(folder: Path, packs: dict) -> tuple[list, list]:
+    from ..core.categorize import check_category_rule
+    return _load_section(folder, packs, "category_rules", check_category_rule)
 
 
 class RuleSet:
     def __init__(self, settings, packs: dict, trackers: list[dict]):
         self.settings, self.packs, self.trackers = settings, packs, trackers
         user_docs, user_dls, self.errors = load_yaml_rules(settings.rules_dir)
+        self.import_profiles, perrs = load_import_profiles(settings.rules_dir, packs)
+        self.category_rules, cerrs = load_category_rules(settings.rules_dir, packs)
+        self.errors += perrs + cerrs
         tracker_docs = []
         for t in trackers:
             for r in t.get("document_rules", []) or []:
@@ -517,7 +575,8 @@ class RuleSet:
                 **conf, "candidates": candidates, "fields": f, **tgt, "excerpt": re.sub(r"\s+", " ", text)[:600]}
 
     # ---------------- deadlines
-    def deadlines(self, answers: dict, today: date | None = None, horizon_days: int = 460) -> list[dict]:
+    def deadlines(self, answers: dict, today: date | None = None, horizon_days: int = 460, overdue_days: int = 30) -> list[dict]:
+        """Every occurrence from `overdue_days` ago (so a missed one shows as late instead of vanishing) to `horizon_days` ahead."""
         today = today or date.today()
         out = []
         for r in self.deadline_rules:
@@ -538,7 +597,7 @@ class RuleSet:
                     continue
                 seen.add(d)
                 dd = date.fromisoformat(d)
-                if today - timedelta(days=0) <= dd <= today + timedelta(days=horizon_days):
+                if today - timedelta(days=overdue_days) <= dd <= today + timedelta(days=horizon_days):
                     out.append(self._dl(r, d, ty))
         return sorted(out, key=lambda x: (x["due"] is None, x["due"] or ""))
 

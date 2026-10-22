@@ -38,7 +38,7 @@ With **Ollama** as provider, AI stays on your computer too. With no AI provider,
 
 ## Routines and proposals
 
-Routines run on your computer while the app is open. They only read your data and write proposals; nothing changes until you approve a proposal. Switch routines off on the Routines screen or start the app with `--no-routines`.
+Routines run on your computer while the app is open. They only read your data and write proposals; nothing changes until you approve a proposal. The same goes for the in-app assistant and MCP apps: when they suggest a transaction, goal, account or deadline change, it waits for your approval, and both the suggestion and your decision are in the audit log. Switch routines off on the Routines screen or start the app with `--no-routines`.
 
 ## Backups and deletion
 

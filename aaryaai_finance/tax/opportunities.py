@@ -67,6 +67,13 @@ def card(rule, country, title, why, deadline, effect, effect_value, ccy, data: D
             "tone": tone, "extra": extra or {}, "caveat": caveat}
 
 
+def long_term_from(bought: date, months: int) -> date:
+    """First day a holding counts as long-term: held *more than* `months` months, so the day after the anniversary
+    (31 Jan 2025 + 12 months -> 1 Feb 2026; 29 Feb 2024 -> 1 Mar 2025)."""
+    from ..core.ledger import _add_months
+    return _add_months(bought, months, bought.day) + timedelta(days=1)
+
+
 # ---------------------------------------------------------------- India
 def _in_equity(h) -> bool:
     return (h.get("currency") == "INR" or h.get("country") == "IN") and (h.get("asset_class") or "shares") == "shares"
@@ -75,8 +82,8 @@ def _in_equity(h) -> bool:
 @engine("in_ltcg_harvest")
 def in_ltcg_harvest(p, d: Data):
     exempt, rate, months = _n(p.get("ltcg_exempt", 125000)), _n(p.get("ltcg_rate", 0.125)), int(p.get("long_term_months", 12))
-    cutoff = d.today - timedelta(days=round(months * 365 / 12))
-    lt = [h for h in d.holdings if _in_equity(h) and h.get("bought") and date.fromisoformat(h["bought"]) <= cutoff and _gain(h) > 0]
+    lt = [h for h in d.holdings if _in_equity(h) and h.get("bought") and d.today >= long_term_from(date.fromisoformat(h["bought"]), months)
+          and _gain(h) > 0]
     if not lt:
         return []
     gains = sum(_gain(h) for h in lt)
@@ -106,8 +113,7 @@ def in_short_to_long(p, d: Data):
         if not (_in_equity(h) and h.get("bought")) or _gain(h) <= 0:
             continue
         b = date.fromisoformat(h["bought"])
-        y, m = divmod(b.month - 1 + months, 12)
-        lt_day = date(b.year + y, m + 1, min(b.day, 28)) + timedelta(days=1)
+        lt_day = long_term_from(b, months)
         left = (lt_day - d.today).days
         if 0 < left <= window:
             g = _gain(h)
@@ -242,7 +248,7 @@ def tax_on_sale(packs: dict, holding: dict, amount: float, today: date | None = 
     ccy = holding.get("currency") or "EUR"
     if holding.get("country") == "IN" or ccy == "INR":
         inv = (packs.get("IN") or {}).get("investing") or {}
-        long = holding.get("bought") and date.fromisoformat(holding["bought"]) <= today - timedelta(days=365)
+        long = holding.get("bought") and today >= long_term_from(date.fromisoformat(holding["bought"]), int(inv.get("long_term_months", 12)))
         if long:
             room = max(_n(inv.get("ltcg_exempt", 125000)) - used_allowance, 0)
             t = max(g - room, 0) * _n(inv.get("ltcg_equity", 0.125))

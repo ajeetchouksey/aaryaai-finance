@@ -266,3 +266,27 @@ model:
           values: [Resident, NRE, NRO, FCNR]
           label: "Indian account type (NRE / NRO / resident)"
           help: "NRE interest is tax-free in India; NRO interest is taxed (TDS). As an NRI, resident savings accounts must be converted."
+
+# Bank-statement import (Money → Import a statement). The first profile whose header names all appear in the CSV is used.
+# Copy one into <data folder>/rules/my-rules.yaml and change the column names to fit your bank's export.
+import_profiles:
+  - id: in_narration_withdrawal_deposit
+    label: "Indian bank CSV (Date · Narration · Withdrawal Amt. · Deposit Amt.)"
+    match: {headers_all: [Date, Narration, Withdrawal Amt., Deposit Amt.]}
+    columns: {date: Date, debit: Withdrawal Amt., credit: Deposit Amt., description: Narration}
+    date_format: ["%d/%m/%y", "%d/%m/%Y"]
+  - id: in_description_debit_credit
+    label: "Indian bank CSV (Txn Date · Description · Debit · Credit)"
+    match: {headers_all: [Txn Date, Description, Debit, Credit]}
+    columns: {date: Txn Date, debit: Debit, credit: Credit, description: Description}
+    date_format: ["%d %b %Y", "%d/%m/%Y", "%d-%m-%Y"]
+
+# Category rules: a payee or description sets the category (Money and statement import). Yours come first; the first match wins.
+category_rules:
+  - {id: in_groceries, category: Groceries, kind: expense, match: {text_any: [bigbasket, dmart, blinkit, zepto, grocery]}}
+  - {id: in_transport, category: Transport, kind: expense, match: {text_any: [uber, rapido, irctc, metro card, fastag]}}
+  - {id: in_utilities, category: "Utilities & internet", kind: expense, match: {text_any: [airtel, jio, bescom, electricity, broadband]}}
+  - {id: in_sip, category: "Investments / SIP", kind: expense, match: {text_any: [sip debit, sip instalment, systematic investment, mutual fund, nach mf]}}
+  - {id: in_emi, category: "Loan / EMI", kind: expense, match: {text_any: [loan emi, emi debit, emi for, loan repay]}}
+  - {id: in_rent_received, category: Rent received, kind: income, match: {text_any: [rent received, rent from]}}
+  - {id: in_salary, category: Salary, kind: income, match: {text_any: [salary]}}

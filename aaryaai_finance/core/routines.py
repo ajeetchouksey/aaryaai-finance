@@ -114,6 +114,7 @@ def forecast_refresh(ctx) -> dict:
     for p in ctx.db.list("proposals"):
         if p["status"] == "pending" and p["key"].startswith("transfer:") and p["key"] not in keys:
             ctx.db.upsert("proposals", {"id": p["id"], "status": "skipped", "decided": datetime.now().isoformat(timespec="seconds")})
+            ctx.audit("Forecast refresh", "Skipped (no longer needed): " + p["title"])
     lows = ", ".join(f"{c} lowest {v['low']:,.0f} in {v['month']}" for c, v in f["lowest"].items())
     return {"text": f"12 months ahead: {lows}. {len(f['plan'])} transfer(s) in the funding plan"
                     + (f"; {len(f['watch'])} currency still dips below its floor." if f["watch"] else "."),
@@ -140,7 +141,8 @@ def monthly_review(ctx) -> dict:
     today = date.today()
     last = today.replace(day=1) - timedelta(days=1)
     s = ledger.summary(ctx.db, "month", last, ctx.base, ctx.rates)
-    prev = ledger.monthly_actuals_period(ctx.db, ctx.base, ctx.rates, (last.replace(day=1) - timedelta(days=90)).replace(day=1), last.replace(day=1) - timedelta(days=1))
+    prev = ledger.monthly_actuals_period(ctx.db, ctx.base, ctx.rates, ledger._add_months(last.replace(day=1), -3, 1),
+                                         last.replace(day=1) - timedelta(days=1))     # the three full months before
     rate = (s["income"] - s["expense"]) / s["income"] if s["income"] else None
     changes = []
     for cat, v in s["by_category"].items():
@@ -173,7 +175,7 @@ def monthly_review(ctx) -> dict:
             + (f" {proposed} goal change(s) proposed." if proposed else ""))
     out = {"text": text, "month": f"{last:%Y-%m}", "income": s["income"], "expense": s["expense"], "savings_rate": rate,
            "changes": changes[:3], "proposed": proposed}
-    ai_on = ctx.db.settings().get("routines:ai_summary", "1") != "0"
+    ai_on = ctx.db.settings().get("routines:ai_summary", "0") == "1"   # opt-in (PRIVACY.md)
     if ai_on:
         try:
             from ..ai.providers import make_provider
@@ -195,8 +197,8 @@ def tax_prep(ctx) -> dict:
         ws_def = p.get("tax_workspace")
         if not ws_def:
             continue
-        start_month = 5 if ws_def.get("year") == "india_fy" else 2
-        if today.month < start_month and ws_def.get("year") != "india_fy":
+        start_month = 5 if ws_def.get("year") == "india_fy" else 2      # India from May, Germany from February
+        if today.month < start_month:
             continue
         try:
             ws = ctx.tax_workspace(code)

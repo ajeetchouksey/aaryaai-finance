@@ -30,9 +30,47 @@ COMMON_CURRENCIES = ["EUR", "INR", "USD", "GBP", "CHF", "SGD", "AED", "AUD", "CA
 
 
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+MAX_UPLOAD = 60 * 1024 * 1024                  # one document
+MAX_BODY = MAX_UPLOAD * 4 // 3 + 1024 * 1024   # its base64 text plus the rest of the JSON
+# Opened in the browser tab. Anything else (HTML, SVG, XML…) is downloaded, so a filed document can never run script in the app's origin.
+INLINE_TYPES = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".txt", ".csv"}
+SANDBOX_CSP = "sandbox; default-src 'none'"
 PUBLIC_PATHS = ("/static/",)
+# Changes made through routes that don't write their own audit entry. Logged after they succeed; request bodies are
+# never logged (they can hold API keys or personal figures).
+AUDITED = {
+    ("POST", "/config"): "Changed settings",
+    ("POST", "/config/secret/clear"): "Removed an API key",
+    ("POST", "/model/user"): "Changed custom fields and record types",
+    ("POST", "/rules/user"): "Changed your rules",
+    ("POST", "/fx/refresh"): "Refreshed exchange rates",
+    ("POST", "/api-settings"): "Changed income and paper-trading settings",
+    ("POST", "/opportunities/inputs"): "Changed tax allowance figures",
+    ("POST", "/routines/settings"): "Changed routine settings",
+    ("POST", "/calendar/status"): "Changed a deadline's status",
+    ("POST", "/docs/file"): "Filed a document",
+    ("POST", "/docs/move"): "Moved a document",
+    ("POST", "/calc/refresh-prices"): "Refreshed holding prices",
+    ("POST", "/chat/model"): "Changed the AI model",
+}
 CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
        "font-src 'self'; connect-src 'self'; frame-src 'self' blob:; object-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+
+
+def _check_documents_root(settings: Settings, value) -> None:
+    """The documents folder must be a folder of its own: the app scans, opens and moves files inside it."""
+    # Plain string normalisation (no filesystem access): this only decides whether the setting is acceptable.
+    norm = lambda p: Path(os.path.normcase(os.path.normpath(os.path.abspath(p))))      # noqa: E731
+    s = os.path.expandvars(str(value or "documents"))
+    if s == "~" or s.startswith(("~/", "~\\")):
+        s = str(Path.home()) + s[1:]
+    r = norm(s if os.path.isabs(s) else os.path.join(settings.data_dir, s))
+    home = norm(Path.home())
+    system = {norm(x) for x in ("/etc", "/usr", "/bin", "/sbin", "/System", "/Library", "/Applications",
+                                os.environ.get("SystemRoot", r"C:\Windows"), os.environ.get("ProgramFiles", r"C:\Program Files"))}
+    bad = (r.parent == r or r == home or r == home.parent or r in system or any(sp in r.parents for sp in system if sp.parent != sp))
+    if bad:
+        raise HTTPException(400, f"Choose a folder just for your documents, not {r}. The app reads and moves files inside it.")
 
 
 def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None) -> FastAPI:
@@ -58,6 +96,12 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         elif origin == "null" and request.method not in ("GET", "HEAD"):
             return JSONResponse({"detail": "Blocked: request from an unknown origin."}, status_code=403)
         path = request.url.path
+        try:
+            too_big = int(request.headers.get("content-length") or 0) > MAX_BODY
+        except ValueError:
+            too_big = True
+        if too_big:
+            return JSONResponse({"detail": "That upload is too large (60 MB at most)."}, status_code=413)
         if path != "/" and not path.startswith(PUBLIC_PATHS):
             given = request.headers.get("x-session-token") or request.query_params.get("t")
             if not given or not secrets.compare_digest(given, token):
@@ -68,7 +112,7 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         resp.headers["X-Frame-Options"] = "DENY"
         resp.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         resp.headers["Cross-Origin-Resource-Policy"] = "same-origin"
-        resp.headers["Content-Security-Policy"] = CSP
+        resp.headers.setdefault("Content-Security-Policy", CSP)      # a route may set a stricter one (/docs/open)
         if not path.startswith("/static/"):
             resp.headers["Cache-Control"] = "no-store"
         return resp
@@ -77,6 +121,15 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
     def ctx() -> Ctx:
         return state["ctx"]
     app.state.get_ctx = ctx
+
+    @app.middleware("http")
+    async def audit_changes(request: Request, call_next):
+        resp = await call_next(request)
+        path = request.url.path
+        label = AUDITED.get((request.method, path)) or ("Deleted a chat" if request.method == "DELETE" and re.fullmatch(r"/chat/\d+", path) else None)
+        if label and resp.status_code < 400:
+            ctx().audit("You", label, path)
+        return resp
 
     @app.exception_handler(IntegrityProblem)
     async def _integrity(_req, exc: IntegrityProblem):
@@ -150,7 +203,8 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         need(p.get("confirm") == "REPLACE", "Type REPLACE to confirm")
         c.settings.backups_dir.mkdir(parents=True, exist_ok=True)
         b = c.settings.backups_dir / f"finance-before-import-{datetime.now():%Y%m%d-%H%M%S}.db"
-        shutil.copy2(c.settings.db_path, b)
+        M.backup_copy(c.settings.db_path, b)
+        M.prune_backups(c.settings.backups_dir)
         counts = c.db.import_all(p.get("data") or {})
         c.audit("You", "Imported data from JSON", json.dumps(counts)[:300])
         return {"ok": True, "imported": counts, "backup": str(b)}
@@ -192,6 +246,7 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         cfg["profile"]["about"] = p.get("about", cfg["profile"].get("about", ""))
         cfg["profile"]["answers"] = {**cfg["profile"].get("answers", {}), **(p.get("answers") or {})}
         if p.get("documents_root"):
+            _check_documents_root(s, p["documents_root"])
             cfg["documents_root"] = p["documents_root"]
         if p.get("folders"):
             cfg["folders"] = {**cfg.get("folders", {}), **p["folders"]}
@@ -233,6 +288,8 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
     def put_config(p: dict = Body(...)):
         c = ctx()
         cfg = c.settings.config
+        if "documents_root" in p:
+            _check_documents_root(c.settings, p["documents_root"])
         for k in ("countries", "base_currency", "extra_currencies", "documents_root", "folders"):
             if k in p:
                 cfg[k] = p[k]
@@ -241,6 +298,12 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         if "ai" in p:
             cfg["ai"] = {**cfg["ai"], **p["ai"]}
         if "fx" in p:
+            for k, v in ((p["fx"] or {}).get("manual_rates") or {}).items():
+                try:
+                    ok = v in (None, "") or float(v) > 0
+                except (TypeError, ValueError):
+                    ok = False
+                need(ok, f"The exchange rate for {k} must be a number above zero.")
             cfg["fx"] = {**cfg["fx"], **p["fx"]}
         if "updates" in p:
             cfg["updates"] = {**cfg.get("updates", {}), "check": bool(p["updates"].get("check", True))}
@@ -292,6 +355,10 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
             _check_paper_trade(c, row)
         if table in ("transactions", "recurring"):
             _check_money_row(c, table, row)
+        if table == "transactions" and row.get("id"):
+            old = c.db.get("transactions", row["id"])
+            if old and old.get("recurring_id") and row.get("date") and row["date"] != old["date"]:
+                ledger.skip_occurrence(c.db, old["recurring_id"], old["date"])     # moved: the old date stays empty
         if table == "calendar":
             row.setdefault("key", "user:" + datetime.now().strftime("%Y%m%d%H%M%S%f"))
             row.setdefault("source", "yours"); row.setdefault("status", "open")
@@ -305,7 +372,10 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
     @app.delete("/api/{table}/{row_id}")
     def delete_row(table: str, row_id: int):
         need(table in ctx().db.tables, "Unknown table", 404)
+        old = ctx().db.get(table, row_id) if table == "transactions" else None
         ctx().db.delete(table, row_id)
+        if old and old.get("recurring_id"):          # one occurrence of a repeating entry: don't create it again
+            ledger.skip_occurrence(ctx().db, old["recurring_id"], old["date"])
         ctx().audit("You", f"Deleted {ctx().db.model['entities'][table].get('label', table).lower()}", f"#{row_id}")
         return {"ok": True}
 
@@ -551,7 +621,7 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         return {"routines": rt.status(c), "proposals": c.db.list("proposals", "created DESC")[:40], "audit": audit,
                 "ai": {"provider": prov_cfg.get("provider"), "ready": make_provider(prov_cfg, c.settings.secret) is not None,
                        "label": PROVIDERS.get(prov_cfg.get("provider"), {}).get("label"), "model": prov_cfg.get("model", "")},
-                "ai_summary": c.db.settings().get("routines:ai_summary", "1") != "0",
+                "ai_summary": c.db.settings().get("routines:ai_summary", "0") == "1",
                 "mcp": {"config": config_snippet(c.settings.data_dir), "last": mcp_last, "clients": __import__("aaryaai_finance.mcp_setup", fromlist=["status"]).status(c.settings.data_dir)}}
 
     @app.post("/routines/run")
@@ -608,7 +678,16 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
     def put_app_settings(p: dict = Body(...)):
         for k, v in p.items():
             if k in ("monthly_income", "paper_starting_cash"):
-                ctx().db.set_setting(k, v)
+                label = k.replace("_", " ").capitalize()
+                if v in (None, "") and k == "monthly_income":
+                    ctx().db.set_setting(k, "")             # empty: use the average from Money
+                    continue
+                try:
+                    n = float(v)
+                except (TypeError, ValueError):
+                    raise HTTPException(400, f"{label} must be a number.")
+                need(n > 0 if k == "paper_starting_cash" else n >= 0, f"{label} must be more than zero.")
+                ctx().db.set_setting(k, n)
         return app_settings()
 
     # ======================= money =======================
@@ -623,6 +702,9 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
                 if x not in exp: exp.insert(-1, x)
             for x in p.get("account_types", []):
                 if x not in types: types.insert(-1, x)
+        for r in c.rules.category_rules:                    # a category your rules use is always one you can pick
+            lst = inc if r.get("kind") == "income" else exp
+            if r["category"] not in lst: lst.insert(-1, r["category"])
         return {"income_categories": inc, "expense_categories": exp, "account_types": types, "frequencies": ledger.FREQUENCIES,
                 "base": c.base, "currencies": c.settings.currencies, "rates": c.rates,
                 "countries": [pack_summary(p) for p in c.packs.values()]}
@@ -682,7 +764,10 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
 
     @app.post("/calendar/status")
     def calendar_status(p: dict = Body(...)):
-        return ctx().set_deadline_status(p["key"], p["status"])
+        need(isinstance(p.get("key"), str) and p.get("status") in ("open", "done"), "Send a deadline key and a status of open or done.")
+        r = ctx().set_deadline_status(p["key"], p["status"])
+        need(not r.get("error"), "No such deadline.", 404)
+        return r
 
     # ======================= rules =======================
     @app.get("/rules")
@@ -709,10 +794,68 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
 
     @app.post("/rules/test")
     def rules_test(p: dict = Body(...)):
-        data = base64.b64decode(p["data"].split(",")[-1])
+        data = _upload(p)
         a = ctx().rules.analyze(data, Path(p.get("filename") or "file").name)
         a.pop("sha256", None)
         return a
+
+    # ======================= bank-statement import =======================
+    @app.get("/import/profiles")
+    def import_profiles():
+        return [{"id": p["id"], "label": p.get("label", p["id"]), "source": p.get("_source", "")} for p in ctx().rules.import_profiles]
+
+    @app.post("/import/preview")
+    def import_preview(p: dict = Body(...)):
+        """Read a statement and show what would be added. Nothing is saved."""
+        from .core import importer
+        c = ctx()
+        acc = c.db.get("accounts", int(p.get("account_id") or 0))
+        need(acc, "Pick the account this statement belongs to.")
+        raw = str(p.get("data") or "").split(",")[-1]
+        need(raw and len(raw) * 3 // 4 <= 20 * 1024 * 1024, "Choose a CSV file of at most 20 MB.")
+        try:
+            data = base64.b64decode(raw, validate=True)
+        except ValueError:
+            raise HTTPException(400, "Couldn't read the uploaded file.")
+        res = importer.parse(data, c.rules.import_profiles, p.get("profile") or None)
+        need(res.get("profile"), res.get("error") or "Couldn't read this file.")
+        existing = [t for t in c.db.list("transactions") if t["account_id"] == acc["id"] and t["kind"] != "transfer"]
+        importer.mark_duplicates(res["rows"], existing)
+        from .core.categorize import categorize
+        for r in res["rows"]:
+            r["category"], r["category_rule"] = categorize(r["description"], r["kind"], c.rules.category_rules)
+        return {**res, "account": {"id": acc["id"], "name": acc["name"], "currency": acc["currency"]},
+                "new": sum(1 for r in res["rows"] if not r["duplicate"])}
+
+    @app.post("/categorize")
+    def categorize_text(p: dict = Body(...)):
+        """The category your rules give a note or payee (used to fill in the category while you type)."""
+        from .core.categorize import categorize
+        cat, rule = categorize(str(p.get("text") or "")[:300], p.get("kind"), ctx().rules.category_rules)
+        return {"category": cat, "rule": rule}
+
+    @app.post("/import/apply")
+    def import_apply(p: dict = Body(...)):
+        """Save the rows you ticked in the preview, all at once (or none if one is wrong)."""
+        c = ctx()
+        acc = c.db.get("accounts", int(p.get("account_id") or 0))
+        need(acc, "Pick the account this statement belongs to.")
+        rows = p.get("rows") or []
+        need(isinstance(rows, list) and 0 < len(rows) <= 5000, "Tick at least one row to import.")
+        now = datetime.now().isoformat(timespec="seconds")
+        out = []
+        for r in rows:
+            need(isinstance(r, dict) and r.get("kind") in ("income", "expense"), "Each row needs kind income or expense.")
+            try:
+                amt = float(r.get("amount"))
+            except (TypeError, ValueError):
+                raise HTTPException(400, "Each row needs an amount.")
+            need(amt > 0, "Amounts must be more than zero.")
+            out.append({"date": r.get("date"), "kind": r["kind"], "amount": round(amt, 2), "account_id": acc["id"],
+                        "category": str(r.get("category") or "")[:80], "note": str(r.get("description") or "")[:200], "created": now})
+        ids = c.db.insert_many("transactions", out)
+        c.audit("You", f"Imported {len(ids)} entries into {acc['name']}", str(p.get("filename") or "")[:120])
+        return {"ok": True, "imported": len(ids)}
 
     # ======================= documents =======================
     @app.get("/docs/meta")
@@ -726,11 +869,7 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
     def docs_analyze(p: dict = Body(...)):
         c = ctx()
         name = Path(p.get("filename") or "document").name
-        try:
-            data = base64.b64decode(p["data"].split(",")[-1])
-        except Exception:  # noqa: BLE001
-            raise HTTPException(400, "Couldn't read the uploaded file.")
-        need(len(data) <= 60 * 1024 * 1024, "File is larger than 60 MB.")
+        data = _upload(p)
         a = c.rules.analyze(data, name)
         if a["confidence"] < 0.6 and a["has_text"]:
             prov = make_provider(c.settings.config["ai"], c.settings.secret)
@@ -741,6 +880,16 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         c.settings.inbox_dir.mkdir(parents=True, exist_ok=True)
         (c.settings.inbox_dir / (a["sha256"] + Path(name).suffix.lower())).write_bytes(data)
         return a
+
+    def _upload(p: dict) -> bytes:
+        """The file inside an upload request (base64, optionally a data: URL), refused before decoding if it is too big."""
+        raw = str(p.get("data") or "").split(",")[-1]
+        need(raw, "No file in the request.")
+        need(len(raw) * 3 // 4 <= MAX_UPLOAD, "File is larger than 60 MB.")
+        try:
+            return base64.b64decode(raw, validate=True)
+        except ValueError:
+            raise HTTPException(400, "Couldn't read the uploaded file.")
 
     def _ai_classify(c: Ctx, prov, data: bytes, name: str) -> dict | None:
         from .rules.engine import extract_text
@@ -810,6 +959,8 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         for r in lib:
             key = (r["path"], r["modified"], r["size"])
             a = state["review"].get(key)
+            if a is None and r["size"] > MAX_UPLOAD:
+                continue                                  # too big to read on every review
             if a is None:
                 a = c.rules.analyze((c.settings.documents_root / r["path"]).read_bytes(), r["name"])
                 a.pop("excerpt", None)
@@ -842,7 +993,11 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         root = ctx().settings.documents_root.resolve()
         tgt = (root / path).resolve()
         need(root in tgt.parents and tgt.is_file(), "Not found", 404)
-        return FileResponse(tgt)
+        inline = tgt.suffix.lower() in INLINE_TYPES
+        if inline:
+            return FileResponse(tgt, filename=tgt.name, content_disposition_type="inline")
+        return FileResponse(tgt, filename=tgt.name, content_disposition_type="attachment", media_type="application/octet-stream",
+                            headers={"Content-Security-Policy": SANDBOX_CSP})
 
     # ======================= invest / learn =======================
     def _prices(p: dict):
@@ -955,7 +1110,12 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
 
     @app.get("/chat/{chat_id}")
     def chat_get(chat_id: int):
-        return {"id": chat_id, "messages": assistant.display_messages(ctx().db.chat_history(chat_id))}
+        msgs = assistant.display_messages(ctx().db.chat_history(chat_id))
+        status = {p["id"]: p["status"] for p in ctx().db.list("proposals")}
+        for m in msgs:
+            for pr in m.get("proposals", []):
+                pr["status"] = status.get(pr["id"], "gone")
+        return {"id": chat_id, "messages": msgs}
 
     @app.delete("/chat/{chat_id}")
     def chat_del(chat_id: int):

@@ -15,6 +15,15 @@ class IntegrityProblem(ValueError):
     """A save/delete that would break a relation (e.g. deleting an account that still has transactions)."""
 
 
+class _Conn(sqlite3.Connection):
+    """`with db.conn() as c:` commits (or rolls back on error) and then closes the connection."""
+    def __exit__(self, *exc):
+        try:
+            return super().__exit__(*exc)
+        finally:
+            self.close()
+
+
 class DB:
     def __init__(self, path: Path, model: dict | None = None, backup_dir: Path | None = None):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -27,7 +36,7 @@ class DB:
                 c.execute("INSERT OR IGNORE INTO settings VALUES (?,?)", (k, v))
 
     def conn(self):
-        c = sqlite3.connect(self.path)
+        c = sqlite3.connect(self.path, timeout=10, factory=_Conn)   # wait for the MCP process or a routine instead of failing
         c.row_factory = sqlite3.Row
         c.execute("PRAGMA foreign_keys=ON")
         return c
@@ -102,6 +111,29 @@ class DB:
                 return int(cur.lastrowid)
         except sqlite3.IntegrityError as e:
             raise IntegrityProblem(_explain(str(e), spec)) from None
+
+    def insert_many(self, table: str, rows: list[dict]) -> list[int]:
+        """Add several rows at once: every row is checked against the model first, and either all are saved or none."""
+        spec = self._spec(table)
+        prepared, problems = [], []
+        for i, row in enumerate(rows):
+            cols, extra, errs = M.coerce(spec, row)
+            if errs:
+                problems.append(f"row {i + 1}: {'; '.join(errs)}")
+            if extra:
+                cols["extra"] = json.dumps(extra, ensure_ascii=False)
+            prepared.append(cols)
+        if problems:
+            raise IntegrityProblem("Nothing was saved. " + " | ".join(problems[:5]))
+        ids = []
+        try:
+            with self.conn() as c:
+                for cols in prepared:
+                    cur = c.execute(f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", list(cols.values()))
+                    ids.append(int(cur.lastrowid))
+        except sqlite3.IntegrityError as e:
+            raise IntegrityProblem(_explain(str(e), spec)) from None
+        return ids
 
     def delete(self, table: str, row_id: int) -> None:
         spec = self._spec(table)

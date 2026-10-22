@@ -6,7 +6,7 @@ The assistant is optional. It answers questions using tools that read your snaps
 
 1. Create an account at <https://console.anthropic.com>, add a small prepaid credit, and create an API key.
 2. Paste the key (`sk-ant-…`). Models: `claude-sonnet-*` (best balance), `claude-haiku-*` (cheapest).
-3. Optional: *web search* lets Claude look up current rules; it costs a little extra per search.
+3. Optional: *web search* lets Claude look up current rules. It is off until you tick it in Settings → AI, and it costs a little extra per search.
 
 A Claude Pro/Max subscription doesn't include API use; the API is billed separately per token. Typical personal use is a few euros a month.
 

@@ -199,7 +199,12 @@
         <div class="card"><h3>In vs out <span class="sub" id="trendSub"></span></h3><div class="chartbox"><canvas id="chTrend"></canvas></div></div>
         <div class="card"><h3>Where it went</h3><div class="chartbox"><canvas id="chCats"></canvas></div></div>
       </div>
-      <div class="card"><h3>Transactions <span class="sub" id="txCount"></span></h3><div id="txList" class="txlist"></div></div>
+      <div class="card"><h3>Transactions <span class="sub" id="txCount"></span></h3>
+        <div class="txtools"><input id="txSearch" type="search" placeholder="Search note, category, account or amount" aria-label="Search transactions">
+          <select id="txKind" aria-label="Type"><option value="">All types</option><option value="expense">Expenses</option><option value="income">Income</option><option value="transfer">Transfers</option></select>
+          <select id="txCat" aria-label="Category"><option value="">All categories</option></select>
+          <button type="button" class="sm ghost" id="txExport">Export CSV</button></div>
+        <div id="txList" class="txlist"></div></div>
     </div>
     <aside>
       <div class="card quick"><h3>Add an entry</h3>
@@ -216,6 +221,10 @@
           <label>Note <input name="note" placeholder="e.g. REWE, school fees, SIP"></label>
           <button id="txSubmit">Add expense</button></form>
         <p class="err" id="txErr" role="alert"></p></div>
+      <div class="card"><h3>Import a bank statement <span class="sub">CSV from your bank</span></h3>
+        <form id="impForm" class="form"><label>Into account <select name="account_id" required></select></label>
+          <label class="drop small" id="impDrop"><input type="file" id="impFile" accept=".csv,text/csv,text/plain"><b>Choose a CSV file</b><span>You check every row before anything is saved</span></label></form>
+        <p class="hint" id="impMsg" aria-live="polite"></p></div>
       <div class="card"><h3>Repeating <span class="sub">written in automatically</span></h3><div id="recList"></div></div>
     </aside>
   </div>
@@ -401,6 +410,7 @@
 </div>
 
 <dialog id="dlg"><form method="dialog" id="dlgForm" class="form"></form></dialog>
+<dialog id="impDlg" class="wide" aria-labelledby="impTitle"><div id="impBody"></div></dialog>
 <div id="toast" role="status"></div>
 <script src="/static/app.js"></script>
 <script src="/static/planning.js"></script>

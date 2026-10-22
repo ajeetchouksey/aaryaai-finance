@@ -30,8 +30,8 @@ const SYM = { EUR: "€", INR: "₹", USD: "$", GBP: "£", JPY: "¥", CHF: "CHF 
 let HIDE = false;
 try { HIDE = localStorage.getItem("afHideAmounts") === "1"; } catch (e) { }
 const MASK = "••••";
-const AMT_RE = /(?:[€₹$£]|\b(?:Rs\.?|EUR|INR|USD|GBP|CHF)\s?)\s?[-−]?\d[\d.,]*(?:\s?(?:k|M|L|Cr|lakh|crore)\b)?|\b\d[\d.,]*\s?(?:€|₹|EUR|INR|USD|lakh|crore|Cr\b)/g;
-const hideAmt = (t) => HIDE ? String(t ?? "").replace(AMT_RE, (m) => { const c = m.match(/[€₹$£]|Rs\.?|EUR|INR|USD|GBP|CHF/)?.[0] || ""; return /^[A-Z]/.test(c) ? (m.startsWith(c) ? c + " " + MASK : MASK + " " + c) : c + MASK; }) : t;
+const AMT_RE = /(?:[€₹$£¥]|S\$|\b(?:Rs\.?|EUR|INR|USD|GBP|CHF|SGD|AED|JPY|AUD|CAD)\s?)\s?[-−]?\d[\d.,]*(?:\s?(?:k|M|L|Cr|lakh|crore)\b)?|\b\d[\d.,]*\s?(?:€|₹|EUR|INR|USD|GBP|CHF|SGD|AED|JPY|lakh|crore|Cr\b)/g;
+const hideAmt = (t) => HIDE ? String(t ?? "").replace(AMT_RE, (m) => { const c = m.match(/S\$|[€₹$£¥]|Rs\.?|EUR|INR|USD|GBP|CHF|SGD|AED|JPY|AUD|CAD/)?.[0] || ""; return /^[A-Z]/.test(c) ? (m.startsWith(c) ? c + " " + MASK : MASK + " " + c) : c + MASK; }) : t;
 function money(v, c = BASE(), d) {
   if (HIDE) return (SYM[c || BASE()] ?? (c || BASE()) + " ") + MASK;
   return moneyRaw(v, c, d);
@@ -58,7 +58,9 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const jsArg = (v) => esc(JSON.stringify(String(v ?? "")));
 // Only https links from outside the app (e.g. the update notice) become clickable.
 const safeUrl = (u) => /^https:\/\//i.test(String(u || "")) ? esc(u) : "";
-const toast = (m) => { const t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.tm); toast.tm = setTimeout(() => t.classList.remove("show"), Math.max(2600, String(m).length * 55)); };
+// Units of a holding: with a public price they give the value away, so they are masked too.
+const units = (n) => HIDE ? "•••" : esc(n);
+const toast = (m) => { const t = $("#toast"); t.textContent = hideAmt(m); t.classList.add("show"); clearTimeout(toast.tm); toast.tm = setTimeout(() => t.classList.remove("show"), Math.max(2600, String(m).length * 55)); };
 const kpi = (l, v, s = "", extra = "") => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div>${extra}</div>`;
 const meter = (f, color) => `<div class="meter"><i style="width:${Math.max(0, Math.min(1, f)) * 100}%;${color ? "background:" + color : ""}"></i></div>`;
 const daysTo = (d) => Math.ceil((new Date(d) - new Date(new Date().toDateString())) / 864e5);
@@ -634,7 +636,7 @@ loaders.invest = async () => {
     alloc[x.asset_type] = (alloc[x.asset_type] || 0) + vb;
     const g = v - c;
     return `<tr class="click" tabindex="0" onclick="editHolding(${x.id})"><td>${esc(x.name)}<div class="hint" style="font-weight:400">${esc(x.ticker || "no ticker")}${x.account ? " · " + esc(x.account) : ""}</div></td>
-      <td data-l="Type">${esc(x.asset_type)}</td><td class="n" data-l="Units">${x.qty}</td>
+      <td data-l="Type">${esc(x.asset_type)}</td><td class="n" data-l="Units">${units(x.qty)}</td>
       <td class="n" data-l="Price">${money(px, x.currency)}<div class="hint">${esc(x.price_date || "manual")}</div></td><td class="n" data-l="Value">${money(v, x.currency)}</td>
       <td class="n ${g >= 0 ? "pos" : "neg"}" data-l="Gain">${g >= 0 ? "+" : ""}${money(g, x.currency)}<div class="hint">${c ? pct(g / c) : ""}</div></td></tr>`;
   });
@@ -708,10 +710,10 @@ loaders.learn = async () => {
     kpi("Pretend cash", eur(p.cash, 2), "", meter(p.cash / p.start, css("--eur"))) + kpi("Realised profit", eur(p.realized_pnl, 2), "from sells");
   const pos = Object.entries(p.positions);
   $("#paperPos").innerHTML = `<thead><tr><th>Ticker</th><th class="n">Units</th><th class="n">Avg cost</th><th class="n">Price</th><th class="n">Value</th><th class="n">Unrealised</th></tr></thead><tbody>` +
-    (pos.map(([t, x]) => `<tr><td>${esc(t)}</td><td class="n" data-l="Units">${x.qty}</td><td class="n" data-l="Avg cost">${x.avg_cost}</td><td class="n" data-l="Price">${x.price}</td><td class="n" data-l="Value">${eur(x.value, 2)}</td>
+    (pos.map(([t, x]) => `<tr><td>${esc(t)}</td><td class="n" data-l="Units">${units(x.qty)}</td><td class="n" data-l="Avg cost">${x.avg_cost}</td><td class="n" data-l="Price">${x.price}</td><td class="n" data-l="Value">${eur(x.value, 2)}</td>
       <td class="n ${x.unrealized >= 0 ? "pos" : "neg"}" data-l="Unrealised">${eur(x.unrealized, 2)}</td></tr>`).join("") || `<tr><td colspan="6"><div class="empty">No positions. Try buying a few units of an ETF.</div></td></tr>`) + "</tbody>";
   $("#paperHist").innerHTML = `<thead><tr><th>When</th><th>Side</th><th>Ticker</th><th class="n">Units</th><th class="n">Price</th><th></th></tr></thead><tbody>` +
-    p.trades.slice().reverse().map((t) => `<tr><td>${esc(t.ts.replace("T", " "))}</td><td data-l="Side">${esc(t.side)}</td><td data-l="Ticker">${esc(t.ticker)}</td><td class="n" data-l="Units">${esc(t.qty)}</td><td class="n" data-l="Price">${esc(t.price)}</td>
+    p.trades.slice().reverse().map((t) => `<tr><td>${esc(t.ts.replace("T", " "))}</td><td data-l="Side">${esc(t.side)}</td><td data-l="Ticker">${esc(t.ticker)}</td><td class="n" data-l="Units">${units(t.qty)}</td><td class="n" data-l="Price">${esc(t.price)}</td>
       <td data-l=""><button class="link" onclick="delTrade(${t.id})">undo</button></td></tr>`).join("") + "</tbody>";
 };
 $("#paperForm").onsubmit = async (e) => {
@@ -890,7 +892,7 @@ loaders.settings = async () => {
       ${k === "azure_openai" ? `<div class="row2"><label>Deployment <input name="deployment" value="${esc(ai.deployment || "")}"></label><label>API version <input name="api_version" value="${esc(ai.api_version || "2024-10-21")}"></label></div>` : ""}
       ${k !== "none" ? `<label>Model ${v.models ? `<select name="model">${v.models.map((m) => `<option ${m === (ai.model || v.default_model) ? "selected" : ""}>${esc(m)}</option>`).join("")}</select>` : `<input name="model" value="${esc(ai.model || "")}">`}</label>` : ""}
       ${secretKey ? `<label>${k === "github_models" ? "GitHub token" : "API key"} <input name="secret" type="password" placeholder="${c.secrets_set[secretKey] ? "saved — leave blank to keep" : "paste here"}"><span class="fieldhint">${c.secrets_storage === "keychain" ? "🔒 Stored in your system keychain (Windows Credential Manager / macOS Keychain), not in a file." : "Stored in secrets.json in your data folder (no system keychain found)."}</span></label>` : ""}
-      ${k === "anthropic" ? `<label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" name="web" ${ai.web_search !== false ? "checked" : ""}> Allow web search for current tax rules</label>` : ""}
+      ${k === "anthropic" ? `<label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" name="web" ${ai.web_search === true ? "checked" : ""}> Allow web search for current tax rules (off by default)</label>` : ""}
       <div style="display:flex;gap:8px"><button>Save</button>${k !== "none" ? `<button type="button" class="ghost" id="aiTest">Test connection</button>` : ""}</div>`;
     $("#setAI").provider.onchange = (e) => drawAI(e.target.value);
     $("#setAI").onsubmit = async (e) => {
@@ -1013,12 +1015,27 @@ window.delChat = async (id) => { await api("/chat/" + id, { method: "DELETE" });
 window.openChat = async (id) => {
   CHAT_ID = id; $("#chatSide").classList.remove("open");
   const c = await api("/chat/" + id);
-  $("#msgs").innerHTML = c.messages.map((m) => m.role === "user" ? userMsg(m.text) : aiMsg(m.text, m.tools)).join("");
+  $("#msgs").innerHTML = c.messages.map((m) => m.role === "user" ? userMsg(m.text) : aiMsg(m.text, m.tools, m.proposals)).join("");
   scrollDown(true); drawChatList();
 };
-const userMsg = (t) => `<div class="msg user"><div class="bub">${esc(t)}</div></div>`;
-const aiMsg = (t, tools = []) => `<div class="msg ai"><div class="ai-ico">✦</div><div class="ai-body">
-  ${tools.length ? `<div class="chips">${[...new Set(tools)].map((x) => `<span class="chip done">${esc(x)}</span>`).join("")}</div>` : ""}${md(t)}</div></div>`;
+const userMsg = (t) => `<div class="msg user"><div class="bub">${esc(hideAmt(t))}</div></div>`;
+const aiMsg = (t, tools = [], props = []) => `<div class="msg ai"><div class="ai-ico">✦</div><div class="ai-body">
+  ${tools.length ? `<div class="chips">${[...new Set(tools)].map((x) => `<span class="chip done">${esc(x)}</span>`).join("")}</div>` : ""}${md(t)}${props.map(aiProp).join("")}</div></div>`;
+// A change the assistant suggested: nothing is saved until the person approves it here or on Routines.
+const PROP_STATUS = { approved: "Approved", skipped: "Skipped", gone: "No longer available" };
+const aiProp = (p) => `<div class="aiprop" data-pid="${Number(p.id)}"><div class="aiprop-t"><span class="lbl">Suggested change</span>${esc(hideAmt(p.title || ""))}</div>
+  <div class="aiprop-a">${!p.status || p.status === "pending"
+    ? `<button class="sm" onclick="decideChat(this,${Number(p.id)},'approve')">Approve</button><button class="sm ghost" onclick="decideChat(this,${Number(p.id)},'skip')">Skip</button>`
+    : `<span class="chip ${p.status === "approved" ? "good" : "muted"}">${PROP_STATUS[p.status] || esc(p.status)}</span>`}</div></div>`;
+window.decideChat = async (btn, id, decision) => {
+  const box = btn.closest(".aiprop-a"); $$("button", box).forEach((b) => b.disabled = true);
+  try {
+    const r = await api(`/proposals/${id}`, { method: "POST", body: { decision } });
+    box.innerHTML = `<span class="chip ${decision === "approve" ? "good" : "muted"}">${decision === "approve" ? "Approved" : "Skipped"}</span>`;
+    toast(decision === "approve" ? "Saved: " + (r.result || "approved") : "Skipped");
+  } catch (e) { toast(e.message); $$("button", box).forEach((b) => b.disabled = false); }
+  window.refreshNavCount?.();
+};
 function scrollDown(force) { const m = $("#msgs"); if (force || m.scrollHeight - m.scrollTop - m.clientHeight < 160) m.scrollTop = m.scrollHeight; }
 async function send() {
   const ta = $("#prompt"), text = ta.value.trim();
@@ -1031,7 +1048,8 @@ async function send() {
   scrollDown(true);
   STREAMING = true; $("#sendBtn").disabled = true; $("#chatStatus").textContent = "Thinking…";
   const live = $("#live"), chipsEl = $(".chips", live), txtEl = $(".txt", live);
-  let buf = "", changed = false, pending = false;
+  let buf = "", proposed = 0, pending = false;
+  const propsEl = document.createElement("div"); live.querySelector(".ai-body").append(propsEl);
   const render = () => { if (pending) return; pending = true; requestAnimationFrame(() => { txtEl.innerHTML = md(buf); pending = false; scrollDown(); }); };
   try {
     const r = await fetch("/chat/send", { method: "POST", headers: HDRS(), body: JSON.stringify({ chat_id: CHAT_ID, text }) });
@@ -1047,8 +1065,11 @@ async function send() {
         const ev = (block.match(/^event: (.*)$/m) || [])[1], data = JSON.parse((block.match(/^data: (.*)$/m) || [, "{}"])[1]);
         if (ev === "chat") { CHAT_ID = data.id; drawChatList(); }
         else if (ev === "text") { buf += data.t; $("#chatStatus").textContent = "Writing…"; render(); }
-        else if (ev === "tool") { chipsEl.insertAdjacentHTML("beforeend", `<span class="chip run" data-n="${data.name}">${esc(data.label)}</span>`); $("#chatStatus").textContent = data.label + "…"; scrollDown(); }
-        else if (ev === "tool_done") { const c = chipsEl.querySelector(`.chip.run[data-n="${data.name}"]`); if (c) c.className = "chip done"; if (data.changed) changed = true; }
+        else if (ev === "tool") { chipsEl.insertAdjacentHTML("beforeend", `<span class="chip run" data-n="${esc(data.name)}">${esc(data.label)}</span>`); $("#chatStatus").textContent = data.label + "…"; scrollDown(); }
+        else if (ev === "tool_done") {
+          const c = chipsEl.querySelector(`.chip.run[data-n="${CSS.escape(String(data.name))}"]`); if (c) c.className = "chip done";
+          if (data.proposal) { proposed++; propsEl.insertAdjacentHTML("beforeend", aiProp(data.proposal)); scrollDown(); }
+        }
         else if (ev === "error") { txtEl.insertAdjacentHTML("beforeend", `<p class="err-inline">⚠ ${esc(data.message)}</p>`); }
         else if (ev === "done") { $$(".chip.run", chipsEl).forEach((c) => c.className = "chip done"); }
       }
@@ -1058,7 +1079,7 @@ async function send() {
   } finally {
     txtEl.classList.remove("cursor"); if (buf) txtEl.innerHTML = md(buf);
     live.removeAttribute("id"); STREAMING = false; $("#sendBtn").disabled = false; $("#chatStatus").textContent = "";
-    if (changed) toast("Claude updated your data");
+    if (proposed) { toast(proposed === 1 ? "A suggested change is waiting for your approval" : `${proposed} suggested changes are waiting for your approval`); window.refreshNavCount?.(); }
     drawChatList(); scrollDown();
   }
 }
@@ -1123,6 +1144,7 @@ loaders.money = async () => {
   const keepA = f.account_id.value, keepT = f.to_account_id.value;
   f.account_id.innerHTML = opts || `<option value="">Add an account first</option>`; f.to_account_id.innerHTML = opts;
   if (keepA) f.account_id.value = keepA; if (keepT) f.to_account_id.value = keepT;
+  const imp = $("#impForm").account_id, keepI = imp.value; imp.innerHTML = opts || `<option value="">Add an account first</option>`; if (keepI) imp.value = keepI;
   if (!f.date.value) f.date.value = todayISO();
   setKind(MONEY.kind, true);
   // kpis
@@ -1144,9 +1166,24 @@ loaders.money = async () => {
   if (cats.length) chart("chCats", doughnut(cats.map((x) => x[0]), cats.map((x) => x[1]), [fmtC(sum.expense, c), "spent"]));
   else { charts.chCats?.destroy(); delete charts.chCats; }
   // transactions
-  $("#txCount").textContent = sum.transactions.length ? `${sum.transactions.length} in this ${MONEY.period}` : "";
+  MONEY.tx = sum.transactions; MONEY.hasAccounts = acc.accounts.length > 0;
+  const usedCats = [...new Set(MONEY.tx.map((t) => t.category).filter(Boolean))].sort(), keepCat = $("#txCat").value;
+  $("#txCat").innerHTML = `<option value="">All categories</option>` + usedCats.map((x) => `<option>${esc(x)}</option>`).join("");
+  if (usedCats.includes(keepCat)) $("#txCat").value = keepCat;
+  drawTx();
+  drawRecurring(acc.recurring || []);
+};
+// The period's entries, narrowed by the search box and filters (nothing is fetched again while you type).
+function txFiltered() {
+  const q = $("#txSearch").value.trim().toLowerCase(), kind = $("#txKind").value, cat = $("#txCat").value;
+  return (MONEY.tx || []).filter((t) => (!kind || t.kind === kind) && (!cat || t.category === cat) &&
+    (!q || [t.note, t.category, t.account, t.to_account, String(t.amount)].some((x) => String(x || "").toLowerCase().includes(q))));
+}
+function drawTx() {
+  const all = MONEY.tx || [], list = txFiltered(), c = MONEY.ccy, hasAccounts = MONEY.hasAccounts;
+  $("#txCount").textContent = all.length ? (list.length === all.length ? `${all.length} in this ${MONEY.period}` : `${list.length} of ${all.length} in this ${MONEY.period}`) : "";
   let day = "";
-  $("#txList").innerHTML = sum.transactions.map((t) => {
+  $("#txList").innerHTML = list.map((t) => {
     const d = new Date(t.date), head = t.date !== day ? `<div class="txday"><span>${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</span></div>` : ""; day = t.date;
     const sign = t.kind === "income" ? "+" : t.kind === "expense" ? "−" : "⇄ ";
     const title = t.kind === "transfer" ? `${esc(t.account)} → ${esc(t.to_account)}` : esc(t.note || t.category || (t.kind === "income" ? "Income" : "Expense"));
@@ -1155,9 +1192,36 @@ loaders.money = async () => {
     return head + `<div class="tx ${t.kind}"><div class="ic">${t.kind === "transfer" ? "⇄" : CAT_ICON[t.category] || "•"}</div>
       <div><div class="t1">${title}</div><div class="t2">${sub}${t.recurring_id ? `<span class="rep">↻ repeating</span>` : ""}${t.doc_id ? `<span class="rep">📎</span>` : ""}</div></div>
       <div class="amt">${sign}${fmtC(t.amount, t.currency)}${cv}</div>
-      ${t.recurring_id ? `<span></span>` : `<button class="del" onclick="delTx(${t.id})" aria-label="Delete" title="Delete">✕</button>`}</div>`;
-  }).join("") || `<div class="empty">${acc.accounts.length ? `Nothing logged for this ${MONEY.period} yet — add an entry on the right.` : "Start by adding your accounts above, then log income and spending."}</div>`;
-  drawRecurring(acc.recurring || []);
+      <div class="txbtns"><button class="del" onclick="editTx(${Number(t.id)})" aria-label="Edit" title="Edit">✎</button>${t.recurring_id ? `<button class="del" onclick="delTx(${t.id})" aria-label="Skip this one" title="Skip this one (the repeating entry stays)">✕</button>`
+        : `<button class="del" onclick="delTx(${t.id})" aria-label="Delete" title="Delete">✕</button>`}</div></div>`;
+  }).join("") || `<div class="empty">${!hasAccounts ? "Start by adding your accounts above, then log income and spending." : all.length ? "Nothing matches your search." : `Nothing logged for this ${MONEY.period} yet — add an entry on the right.`}</div>`;
+}
+$("#txSearch").addEventListener("input", drawTx);
+$("#txKind").onchange = drawTx; $("#txCat").onchange = drawTx;
+// Edit an entry: the same checks as adding one. Moving a repeating entry's date leaves that date empty.
+window.editTx = (id) => {
+  const t = (MONEY.tx || []).find((x) => x.id === id); if (!t) return;
+  const accts = MONEY.accts.map((a) => [a.id, `${a.name} (${a.currency})`]);
+  const cats = t.kind === "income" ? MONEY.meta.income_categories : MONEY.meta.expense_categories;
+  const fields = [["date", "Date", "date"], ["amount", "Amount", "number"], ["account_id", t.kind === "income" ? "Into account" : "From account", "select", accts]];
+  if (t.kind === "transfer") fields.push(["to_account_id", "To account", "select", accts], ["to_amount", "Amount received", "number"]);
+  else fields.push(["category", "Category", "select", ["", ...new Set([...(t.category && !cats.includes(t.category) ? [t.category] : []), ...cats])]]);
+  fields.push(["note", "Note"]);
+  dialog(`Edit ${t.kind}`, fields, t, async (r) => {
+    const row = { id: t.id, kind: t.kind, date: r.date, amount: r.amount, account_id: +r.account_id, note: r.note || null, category: t.kind === "transfer" ? null : (r.category || null),
+      to_account_id: t.kind === "transfer" ? +r.to_account_id : null, to_amount: t.kind === "transfer" ? r.to_amount : null, recurring_id: t.recurring_id, doc_id: t.doc_id };
+    await api("/api/transactions", { method: "POST", body: row }); loaders.money();
+  });
+};
+// Export what you see (after search and filters) as CSV for a spreadsheet. Text that a spreadsheet would run as a
+// formula (=, +, -, @ at the start) is prefixed with an apostrophe.
+$("#txExport").onclick = () => {
+  const cell = (v) => { let s = String(v ?? ""); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const rows = [["Date", "Type", "Amount", "Currency", "Account", "To account", "Amount received", "Category", "Note"],
+    ...txFiltered().map((t) => [t.date, t.kind, t.amount, t.currency, t.account, t.to_account || "", t.kind === "transfer" ? (t.to_amount ?? "") : "", t.category || "", t.note || ""])];
+  const blob = new Blob(["\ufeff" + rows.map((r) => r.map(cell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `aaryaai-finance-${MONEY.period}-${MONEY.anchor}.csv`;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 function drawRecurring(list) {
   const accts = Object.fromEntries(MONEY.accts.map((a) => [a.id, a]));
@@ -1217,7 +1281,7 @@ $("#txForm").onsubmit = async (e) => {
     if (b.frequency) await api("/api/recurring", { method: "POST", body: { ...row, frequency: b.frequency, start_date: b.date, end_date: b.end_date || null, active: 1 } });
     else await api("/api/transactions", { method: "POST", body: { ...row, date: b.date, doc_id: f.dataset.doc ? +f.dataset.doc : null } });
     toast(b.frequency ? `Repeating ${MONEY.kind} set up` : `${MONEY.kind[0].toUpperCase() + MONEY.kind.slice(1)} added`);
-    f.amount.value = ""; f.note.value = ""; f.to_amount.value = ""; f.frequency.value = ""; f.end_date.value = ""; delete f.dataset.doc;
+    f.amount.value = ""; f.note.value = ""; f.to_amount.value = ""; f.frequency.value = ""; f.end_date.value = ""; delete f.dataset.doc; delete f.category.dataset.picked;
     $(".quick").classList.remove("repeat"); setKind(MONEY.kind); loaders.money();
   } catch (err) { $("#txErr").textContent = err.message; }
 };
@@ -1294,7 +1358,7 @@ function drawQueueCard(id, a) {
       <label>Category <select data-f="category">${DOCS.meta.categories.map((x) => `<option ${x === a.category ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></label>
       <label>Folder <input data-f="folder" list="fl-${id}" value="${esc(a.folder)}"><datalist id="fl-${id}">${folders.map((x) => `<option value="${esc(x)}">`).join("")}</datalist></label>
       <label>File name <input data-f="filename" value="${esc(a.filename)}"></label></div>
-    ${a.excerpt ? `<details><summary class="hint">What I read</summary><div class="excerpt">${esc(a.excerpt)}</div></details>` : ""}
+    ${a.excerpt ? `<details><summary class="hint">What I read</summary><div class="excerpt">${esc(hideAmt(a.excerpt))}</div></details>` : ""}
     <div class="qacts"><button class="sm" data-act="file">File it</button>
       ${F.amount ? `<button class="sm ghost" data-act="filetx">File + log as expense</button>` : ""}
       <button class="sm ghost" data-act="skip">Discard</button><span class="okline"></span></div></div>`;
@@ -1368,4 +1432,69 @@ async function checkUpdate(force) {
     };
   } else el.hidden = true;
   return u;
+}
+
+
+// ---------------- bank-statement import ----------------
+// The file is read by an import profile (packs or your rules); you see every row and untick what you don't want.
+// Rows that are already in the account (same date, type and amount) start unticked.
+$("#impFile").onchange = async (e) => {
+  const file = e.target.files[0]; e.target.value = "";
+  if (!file) return;
+  const account_id = $("#impForm").account_id.value;
+  if (!account_id) { $("#impMsg").textContent = "Add an account first."; return; }
+  $("#impMsg").textContent = "Reading " + file.name + "…";
+  try {
+    const p = await api("/import/preview", { method: "POST", body: { account_id, filename: file.name, data: await readAsDataURL(file) } });
+    $("#impMsg").textContent = "";
+    showImport(p, file.name);
+  } catch (err) { $("#impMsg").textContent = err.message; }
+};
+async function showImport(p, filename) {
+  const c = p.account.currency, d = $("#impDlg");
+  if (!MONEY.meta) MONEY.meta = await api("/money/meta");
+  const catSel = (r) => { const list = r.kind === "income" ? MONEY.meta.income_categories : MONEY.meta.expense_categories;
+    return `<select data-cat="${r.i}" aria-label="Category" ${r.category_rule ? `title="Set by rule ${esc(r.category_rule)}"` : ""}><option value="">—</option>${list.map((x) => `<option ${x === r.category ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>`; };
+  const row = (r) => `<tr class="${r.duplicate ? "dup" : ""}"><td><input type="checkbox" data-i="${r.i}" ${r.duplicate ? "" : "checked"} aria-label="Import this row"></td>
+    <td>${esc(r.date)}</td><td>${esc(hideAmt(r.description)) || `<span class="hint">no description</span>`}${r.duplicate ? ` <span class="tag">already there</span>` : ""}</td>
+    <td>${catSel(r)}</td><td class="n ${r.kind === "income" ? "pos" : ""}">${r.kind === "income" ? "+" : "−"}${money(r.amount, c, 2)}</td></tr>`;
+  $("#impBody").innerHTML = `<h3 id="impTitle">Import into ${esc(p.account.name)}</h3>
+    <p class="hint">${esc(filename)} · read with “${esc(p.profile.label)}” (${esc(p.profile.source)}) · ${p.rows.length} rows, ${p.new} new${p.skipped.length ? ` · ${p.skipped.length} lines skipped` : ""}</p>
+    <div class="tablewrap imp-rows"><table class="rt"><thead><tr><th><input type="checkbox" id="impAll" aria-label="Tick all" ${p.new === p.rows.length ? "checked" : ""}></th><th>Date</th><th>Description</th><th>Category</th><th class="n">Amount</th></tr></thead>
+      <tbody>${p.rows.map(row).join("") || `<tr><td colspan="5" class="hint">No rows with a date and an amount.</td></tr>`}</tbody></table></div>
+    ${p.skipped.length ? `<details><summary class="hint">Lines that were skipped</summary><ul class="hint">${p.skipped.map((s) => `<li>Line ${s.line}: ${esc(s.reason)} · ${esc(hideAmt(s.text))}</li>`).join("")}</ul></details>` : ""}
+    <div class="dlg-actions"><button type="button" class="ghost" id="impCancel">Cancel</button><button type="button" id="impGo"></button></div>`;
+  const boxes = () => $$("#impBody tbody input[type=checkbox]");
+  const count = () => { const n = boxes().filter((b) => b.checked).length; $("#impGo").textContent = n ? `Import ${n} ${n === 1 ? "entry" : "entries"}` : "Nothing ticked"; $("#impGo").disabled = !n; };
+  boxes().forEach((b) => b.onchange = count);
+  $("#impAll").onchange = (e) => { boxes().forEach((b) => b.checked = e.target.checked); count(); };
+  $("#impCancel").onclick = () => d.close();
+  $("#impGo").onclick = async () => {
+    const rows = boxes().filter((b) => b.checked).map((b) => ({ ...p.rows[+b.dataset.i], category: $(`#impBody select[data-cat="${b.dataset.i}"]`).value }));
+    $("#impGo").disabled = true;
+    try {
+      const r = await api("/import/apply", { method: "POST", body: { account_id: p.account.id, filename, rows } });
+      d.close(); toast(`Imported ${r.imported} ${r.imported === 1 ? "entry" : "entries"}`); loaders.money();
+    } catch (err) { toast(err.message); $("#impGo").disabled = false; }
+  };
+  count(); d.showModal();
+}
+
+// ---------------- category rules while you type ----------------
+// Your category rules (and the packs') suggest a category from the note, unless you picked one yourself.
+{
+  const f = $("#txForm"); let timer;
+  f.category.addEventListener("change", () => { f.category.dataset.picked = "1"; });
+  f.note.addEventListener("input", () => {
+    clearTimeout(timer);
+    if (f.category.dataset.picked || MONEY.kind === "transfer") return;
+    timer = setTimeout(async () => {
+      try {
+        const r = await api("/categorize", { method: "POST", body: { text: f.note.value, kind: MONEY.kind } });
+        if (r.category && !f.category.dataset.picked && [...f.category.options].some((o) => o.value === r.category)) {
+          f.category.value = r.category; f.category.title = "Suggested by rule " + r.rule;
+        }
+      } catch (e) { /* a suggestion is optional */ }
+    }, 350);
+  });
 }

@@ -12,6 +12,8 @@ Plain English:
 """
 from __future__ import annotations
 
+import json
+
 import calendar
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -59,6 +61,25 @@ def occurrences(start: date, freq: str, until: date, end: date | None = None) ->
             return out
 
 
+def skipped_dates(raw) -> list[str]:
+    """Dates removed from a repeating entry (stored as a JSON list in recurring.skip_dates)."""
+    if not raw:
+        return []
+    try:
+        v = json.loads(raw) if isinstance(raw, str) else raw
+    except ValueError:
+        return []
+    return [str(x) for x in v] if isinstance(v, list) else []
+
+
+def skip_occurrence(db: DB, recurring_id: int, day: str) -> None:
+    """Remember that one generated entry was removed or moved, so it isn't created again."""
+    r = db.get("recurring", recurring_id)
+    if r:
+        days = sorted(set(skipped_dates(r.get("skip_dates"))) | {day})
+        db.upsert("recurring", {"id": recurring_id, "skip_dates": json.dumps(days)})
+
+
 def materialize_recurring(db: DB, today: date | None = None) -> int:
     """Write any due occurrences of repeating entries into transactions (idempotent)."""
     today = today or date.today()
@@ -66,7 +87,10 @@ def materialize_recurring(db: DB, today: date | None = None) -> int:
     with db.conn() as c:
         for r in c.execute("SELECT * FROM recurring WHERE active=1").fetchall():
             end = date.fromisoformat(r["end_date"]) if r["end_date"] else None
+            skip = set(skipped_dates(r["skip_dates"]))
             for d in occurrences(date.fromisoformat(r["start_date"]), r["frequency"], today, end):
+                if d.isoformat() in skip:
+                    continue
                 cur = c.execute(
                     "INSERT OR IGNORE INTO transactions (date, account_id, kind, amount, category, note, to_account_id, to_amount, recurring_id, created) "
                     "VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -170,6 +194,10 @@ def monthly_actuals(db: DB, base: str, rates: dict, months: int = 3) -> dict:
     first = today.replace(day=1)
     start = _add_months(first, -months, 1)
     accts = {a["id"]: a for a in db.list("accounts")}
+    dated = [t["date"] for t in db.list("transactions") if t["kind"] != "transfer"]
+    if dated:                                  # a ledger started last month averages over one month, not three
+        f = date.fromisoformat(min(dated)).replace(day=1)
+        months = max(1, min(months, (first.year - f.year) * 12 + first.month - f.month))
     inc = exp = 0.0
     cats = defaultdict(float)
     n = 0

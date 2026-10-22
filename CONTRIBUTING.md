@@ -50,6 +50,42 @@ document_rules:
 
 Paths can't escape the documents folder, and existing files are never overwritten — a number is added instead.
 
+## Bank-statement import profiles
+
+**Money → Import a bank statement** reads your bank's CSV export with a profile. Profiles come from your rules files (`<data folder>/rules/*.yaml`) first, then the switched-on country packs, then a built-in generic one. The first profile whose `headers_all` names all appear in one row of the file is used, so lines of account details above the table are fine.
+
+```yaml
+import_profiles:
+  - id: my_bank                         # unique; reuse a pack id to replace that profile
+    label: My bank's CSV
+    match: {headers_all: [Buchungstag, Betrag]}      # header names that identify the file (case doesn't matter)
+    columns:
+      date: Buchungstag
+      amount: Betrag                    # negative = money out. Or use debit: … and credit: … instead
+      description: [Beguenstigter/Zahlungspflichtiger, Verwendungszweck]   # joined with " · "
+    date_format: ["%d.%m.%Y", "%d.%m.%y"]   # Python strftime codes; the first that fits is used
+    delimiter: ";"                      # optional; detected when left out
+    invert: false                       # optional; true for card statements where spending is positive
+```
+
+Amounts are read the German (`1.234,56`), English (`1,234.56`) and Indian (`1,20,000`) way; `12,50-` and `(12.50)` count as negative. You see every row before anything is saved, rows already in the account (same date, type and amount) start unticked, and the import is all-or-nothing.
+
+## Category rules
+
+A payee or note sets the category, the same way every time: while you type a note in **Money → Add an entry** (until you pick a category yourself) and for every row of a statement import. Your rules files come first, then the country packs; the first rule that matches wins, and a rule with a pack rule's `id` replaces it.
+
+```yaml
+category_rules:
+  - id: pets
+    category: Pets                      # a new category appears in the pickers automatically
+    kind: expense                       # optional: only for expenses (or income)
+    match:
+      text_any: [fressnapf, zooplus]    # any of these words (ignoring case, spaces and punctuation)
+      text_all: []                      # optional: all of these words
+```
+
+Words need at least three letters, so a rule can't match almost everything by accident. In the import preview, hovering over a row's category shows which rule chose it.
+
 ## Deadline rules
 
 ```yaml
@@ -156,4 +192,4 @@ pytest -m ui
 A failing UI test saves a full-page screenshot in `ui-artifacts/`. CI runs them in a separate job and uploads those screenshots.
 Tests never touch your real settings: `tests/conftest.py` points every settings location (app, Claude Desktop, VS Code) into a temporary folder.
 
-The manual acceptance test (UAT) guide covers the same ground plus what a browser test can't: Claude Desktop answering, VS Code, AI providers.
+The manual [acceptance test (UAT) guide](docs/uat.md) covers the same ground plus what a browser test can't: Claude Desktop answering, VS Code, AI providers.

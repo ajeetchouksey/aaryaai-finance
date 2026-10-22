@@ -1,6 +1,6 @@
 {
   "$comment": "The data model. The database is generated from this file; packs and users can add fields (see CONTRIBUTING.md). Field types: text, int, number, money, bool, date, datetime, enum, ref, json, currency, country.",
-  "version": 3,
+  "version": 4,
   "entities": {
     "accounts": {
       "label": "Account",
@@ -118,6 +118,11 @@
         "active": {
           "type": "bool",
           "default": 1
+        },
+        "skip_dates": {
+          "type": "json",
+          "label": "Skipped dates",
+          "help": "Dates you removed from this repeating entry; they are not created again."
         }
       }
     },

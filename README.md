@@ -52,7 +52,7 @@ Options: `aaryaai-finance --data-dir PATH --port 8770 --no-browser --no-routines
 | **Diversify** | Asset class, country, currency, sector and companies inside your funds; your rules; target mix |
 | **Opportunities** | Tax allowances, holding periods and deadlines from your country packs |
 | **Budget** | Monthly spending, 50/30/20 check, cash cushion |
-| **Money** | Accounts per country, income/expense/transfer, repeating entries (daily → yearly), monthly charts |
+| **Money** | Accounts per country, income/expense/transfer, repeating entries (daily → yearly), bank-statement CSV import with a preview, monthly charts |
 | **Net worth** | Net worth by currency and in your base currency, staged purchases (e.g. a flat paid in instalments) |
 | **Invest / Learn** | Holdings, SIP simulator, strategy backtests and paper trading on synthetic or real prices — no live trading |
 | **Documents** | Drop PDFs, images, Excel or Word files: text is extracted, the rules decide type and folder, you confirm the move |
@@ -60,7 +60,7 @@ Options: `aaryaai-finance --data-dir PATH --port 8770 --no-browser --no-routines
 | **Deadlines** | Deadlines from your packs, calculators (e.g. German refund estimate, India old vs new regime), checklists |
 | **Routines** | Scheduled checks, proposals to approve, connections (AI, MCP), audit log |
 | **Rules** | Test a document against the rules, write your own rules in YAML |
-| **Ask AI** | Chat that can read your snapshot, forecast, odds and tax status, run calculators and log entries |
+| **Ask AI** | Chat that can read your snapshot, forecast, odds and tax status, run calculators and suggest entries, goals or accounts for you to approve |
 
 ## Your data folder
 

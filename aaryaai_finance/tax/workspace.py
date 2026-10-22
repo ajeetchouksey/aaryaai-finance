@@ -168,13 +168,10 @@ def _coerce(q: dict, v):
     if v in (None, ""):
         return None
     if t == "number":
-        sv = str(v).strip().replace("€", "").replace("₹", "").strip()
-        if re.fullmatch(r"-?\d{1,3}(\.\d{3})*(,\d+)?|-?\d+,\d+", sv):   # German style 68.400,00
-            sv = sv.replace(".", "").replace(",", ".")
-        try:
-            return float(sv.replace(",", ""))
-        except ValueError:
-            return None
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return float(v)
+        from ..rules.engine import _to_float           # the same reading of 68.400,00 / 68,400.00 / 1,20,000 as documents
+        return _to_float(str(v))
     if t == "bool":
         return v if isinstance(v, bool) else str(v).lower() in ("1", "true", "yes", "on")
     return str(v)

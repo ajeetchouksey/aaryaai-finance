@@ -304,6 +304,33 @@ def test_connect_claude_desktop_through_mcp(page):
 
 
 # ---------------------------------------------------------------- privacy and security
+# ---------------------------------------------------------------- Money: search, edit and export
+def test_search_edit_and_export_transactions(page):
+    acc = page.evaluate("api('/api/accounts')")[0]["id"]
+    today = page.evaluate("new Date().toLocaleDateString('sv')")
+    page.evaluate(f"api('/api/transactions', {{method: 'POST', body: {{date: '{today}', kind: 'expense', account_id: {acc}, amount: 12.5, "
+                  f"category: 'Groceries', note: '=UI test formula shop'}}}})")
+    go(page, "money", "#txList")
+    page.click("#perSeg button[data-p=month]")
+    page.wait_for_function("document.querySelector('#txList').innerText.includes('UI test formula shop')")
+    total = page.locator("#txList .tx").count()
+    page.fill("#txSearch", "formula shop")
+    page.wait_for_function("document.querySelectorAll('#txList .tx').length === 1")
+    assert " of " in page.locator("#txCount").inner_text() and total > 1
+    with page.expect_download() as dl:
+        page.click("#txExport")
+    text = Path(dl.value.path()).read_text(encoding="utf-8-sig")
+    assert text.splitlines()[0].startswith("Date,Type,Amount") and "'=UI test formula shop" in text
+    page.locator("#txList .tx button[aria-label=Edit]").click()
+    dlg = page.locator("#dlg")
+    dlg.wait_for(state="visible")
+    dlg.locator("input[name=amount]").fill("13.75")
+    dlg.locator("button:has-text('Save')").click()
+    page.wait_for_function("document.querySelector('#txList').innerText.includes('13,75') || document.querySelector('#txList').innerText.includes('13.75')")
+    assert any(t["amount"] == 13.75 and (t["note"] or "").endswith("formula shop") for t in page.evaluate("api('/api/transactions')"))
+    page.fill("#txSearch", "")
+
+
 def test_hide_amounts(page):
     nw = page.locator("#homeKpis .kpi").first
     assert "•" not in nw.inner_text()
@@ -312,6 +339,26 @@ def test_hide_amounts(page):
     page.wait_for_function("document.querySelector('#homeKpis .kpi').innerText.includes('•')")
     page.keyboard.press("Alt+KeyH")
     page.wait_for_function("!document.querySelector('#homeKpis .kpi').innerText.includes('•')")
+
+
+def test_hide_amounts_covers_fields_units_toasts_and_chat(page):
+    page.keyboard.press("Alt+KeyH")
+    page.wait_for_function("document.body.classList.contains('amounts-hidden')")
+    try:
+        go(page, "invest", "#holdTbl td[data-l=Units]")
+        units = page.locator("td[data-l=Units]").first.inner_text()
+        assert units == "•••"
+        assert page.evaluate("hideAmt('Paid ¥12,000 and S$300 and 500 SGD')") == "Paid ¥•••• and S$ •••• and •••• SGD"
+        page.evaluate("toast('Saved: 1,234.50 EUR transferred')")
+        assert "1,234" not in page.locator("#toast").inner_text()
+        assert "4,000" not in page.evaluate("userMsg('my salary is €4,000')")
+        go(page, "forecast", "#floorForm input[type=number]")
+        field = page.locator("#floorForm input[type=number]").first
+        assert "blur" in field.evaluate("e => getComputedStyle(e).filter")
+        field.focus()
+        assert field.evaluate("e => getComputedStyle(e).filter") == "none"      # readable while you edit it
+    finally:
+        page.keyboard.press("Alt+KeyH")
 
 
 # ---------------------------------------------------------------- text from rules, packs and documents is shown, never run
@@ -380,6 +427,77 @@ def test_api_refuses_requests_without_the_page_token(page, app):
     assert r.status == 401 and "Session expired" in r.text()
     r = page.request.get(app["url"] + "/home", headers={"Origin": "https://evil.example"})
     assert r.status == 403
+
+
+# ---------------------------------------------------------------- Ask AI: suggestions wait for approval
+def test_chat_suggestion_waits_for_approval(page, monkeypatch):
+    from aaryaai_finance import server as srv
+    from aaryaai_finance.ai.providers import Event, Final
+    acc = page.evaluate("api('/api/accounts')")[0]["id"]
+
+    class Scripted:
+        def __init__(self):
+            self.turn = 0
+
+        def stream(self, system, history, tools):
+            self.turn += 1
+            if self.turn == 1:
+                yield Event("tool_start", name="add_transaction")
+                yield Final([{"type": "tool_use", "id": "t1", "name": "add_transaction",
+                              "input": {"kind": "expense", "account_id": acc, "amount": 12.34, "category": "Groceries"}}], "tool_use")
+            else:
+                yield Event("text", text="I proposed it.")
+                yield Final([{"type": "text", "text": "I proposed it."}], "end_turn")
+
+    monkeypatch.setattr(srv, "make_provider", lambda cfg, secret: Scripted())
+    before = len(page.evaluate("api('/api/transactions')"))
+    go(page, "chat")
+    page.fill("#prompt", "log 12.34 for groceries")
+    page.press("#prompt", "Enter")
+    card = page.locator(".aiprop").last
+    card.wait_for()
+    assert "12.34" in card.inner_text() and len(page.evaluate("api('/api/transactions')")) == before
+    card.locator("button:has-text('Approve')").click()
+    card.locator(".chip:has-text('Approved')").wait_for()
+    assert len(page.evaluate("api('/api/transactions')")) == before + 1
+
+
+# ---------------------------------------------------------------- Money: import a bank statement
+def test_import_a_statement_with_preview(page, tmp_path):
+    csv = tmp_path / "statement.csv"
+    csv.write_text("Buchungstag;Verwendungszweck;Beguenstigter/Zahlungspflichtiger;Betrag\n"
+                   "02.10.2026;Einkauf;UI test bakery;-7,40\n03.10.2026;Erstattung;UI test refund;12,00\n", encoding="utf-8")
+    go(page, "money", "#impForm")
+    page.wait_for_function("document.querySelectorAll('#impForm select option[value]:not([value=\"\"])').length > 0")
+    before = len(page.evaluate("api('/api/transactions')"))
+    page.set_input_files("#impFile", str(csv))
+    dlg = page.locator("#impDlg")
+    dlg.wait_for(state="visible")
+    assert "2 new" in dlg.inner_text() and "UI test bakery" in dlg.inner_text()
+    dlg.locator("tbody input[type=checkbox]").nth(1).uncheck()               # keep only the bakery
+    dlg.locator("#impGo:has-text('Import 1 entry')").click()
+    dlg.wait_for(state="hidden")
+    after = page.evaluate("api('/api/transactions')")
+    assert len(after) == before + 1 and any((t["note"] or "").startswith("UI test bakery") for t in after)
+
+
+def test_category_rules_suggest_while_typing_and_in_the_import_preview(page, tmp_path):
+    go(page, "money", "#txForm")
+    page.click("#kindSeg button[data-k=expense]")
+    page.fill("#txForm input[name=note]", "REWE Markt")
+    page.wait_for_function("document.querySelector('#txForm select[name=category]').value === 'Groceries'")
+    page.select_option("#txForm select[name=category]", "Eating out")                 # your own pick wins from now on
+    page.fill("#txForm input[name=note]", "Stadtwerke")
+    page.wait_for_timeout(700)
+    assert page.eval_on_selector("#txForm select[name=category]", "e => e.value") == "Eating out"
+    csv = tmp_path / "cats.csv"
+    csv.write_text("Buchungstag;Verwendungszweck;Beguenstigter/Zahlungspflichtiger;Betrag\n04.10.2026;Abschlag;Stadtwerke UI test;-80,00\n", encoding="utf-8")
+    page.wait_for_function("document.querySelectorAll('#impForm select option').length > 0")
+    page.set_input_files("#impFile", str(csv))
+    sel = page.locator("#impDlg select[data-cat]").first
+    sel.wait_for()
+    assert sel.input_value() == "Utilities & internet" and "de_utilities" in sel.get_attribute("title")
+    page.click("#impCancel")
 
 
 # ---------------------------------------------------------------- first-time setup

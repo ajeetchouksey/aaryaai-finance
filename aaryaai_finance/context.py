@@ -19,7 +19,18 @@ class Ctx:
         settings.data_dir.mkdir(parents=True, exist_ok=True)
         self.db = None
         self.secrets_moved = settings.migrate_secrets()
+        self._sweep_inbox()
         self.reload()
+
+    def _sweep_inbox(self, days: int = 7) -> None:
+        """Uploads that were looked at but never filed are copies; remove them after a week."""
+        cutoff = datetime.now().timestamp() - days * 86400
+        try:
+            for f in self.settings.inbox_dir.glob("*"):
+                if f.is_file() and f.stat().st_mtime < cutoff:
+                    f.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     def reload(self):
         self.packs = load_packs(self.settings)
@@ -63,7 +74,10 @@ class Ctx:
         manual_wins = cfg.get("source") == "manual"
         for k, v in (cfg.get("manual_rates") or {}).items():
             if v and (manual_wins or k not in r):
-                r[k] = float(v)
+                try:
+                    r[k] = float(v)
+                except (TypeError, ValueError):   # a hand-edited config.yaml must not break every screen
+                    continue
         return r
 
     def conv(self, amount, frm, to=None):
@@ -336,8 +350,22 @@ class Ctx:
 
     def decide(self, pid: int, decision: str, actor: str = "You") -> dict:
         p = self.db.get("proposals", pid)
-        if not p or p["status"] != "pending":
+        status = "approved" if decision == "approve" else "skipped"
+        with self.db.conn() as c:                 # claim it first: a double click or a second app can't apply it twice
+            claimed = c.execute("UPDATE proposals SET status=?, decided=? WHERE id=? AND status='pending'",
+                                (status, datetime.now().isoformat(timespec="seconds"), pid)).rowcount
+        if not p or not claimed:
             raise ValueError("This proposal was already decided or no longer exists.")
+        try:
+            result = self._apply(p, decision)
+        except Exception:
+            with self.db.conn() as c:             # nothing was applied: it waits again
+                c.execute("UPDATE proposals SET status='pending', decided=NULL WHERE id=?", (pid,))
+            raise
+        self.audit(actor, ("Approved: " if decision == "approve" else "Skipped: ") + p["title"], result)
+        return {"ok": True, "result": result}
+
+    def _apply(self, p: dict, decision: str) -> str:
         result = ""
         if decision == "approve":
             a = json.loads(p.get("action") or "{}") if isinstance(p.get("action"), str) else (p.get("action") or {})
@@ -359,12 +387,32 @@ class Ctx:
                 result = "deadline added"
             elif t == "add_transaction":
                 row = dict(a["row"])
+                if float(row.get("amount") or 0) <= 0:
+                    raise ValueError("The amount must be more than zero.")
                 row.setdefault("created", datetime.now().isoformat(timespec="seconds"))
                 rid = self.db.upsert("transactions", row)
                 result = f"transaction #{rid} added"
+            elif t == "add_recurring":
+                row = dict(a["row"])
+                if float(row.get("amount") or 0) <= 0:
+                    raise ValueError("The amount must be more than zero.")
+                rid = self.db.upsert("recurring", row)
+                ledger.materialize_recurring(self.db)
+                result = f"repeating entry #{rid} added"
+            elif t == "save_goal":
+                row = dict(a["row"])
+                if row.get("id") and not self.db.get("goals", row["id"]):
+                    raise ValueError("That goal no longer exists.")
+                rid = self.db.upsert("goals", row)
+                result = f"goal #{rid} saved"
+            elif t == "add_account":
+                rid = self.db.upsert("accounts", {k: v for k, v in a["row"].items() if k != "id"})
+                result = f"account #{rid} added"
+            elif t == "set_deadline_status":
+                r = self.set_deadline_status(a["key"], a["status"])
+                if r.get("error"):
+                    raise ValueError("That deadline no longer exists.")
+                result = f"deadline marked {a['status']}"
             else:
                 result = "noted"
-        self.db.upsert("proposals", {"id": pid, "status": "approved" if decision == "approve" else "skipped",
-                                     "decided": datetime.now().isoformat(timespec="seconds")})
-        self.audit(actor, ("Approved: " if decision == "approve" else "Skipped: ") + p["title"], result)
-        return {"ok": True, "result": result}
+        return result
