@@ -690,6 +690,11 @@ nav#tabs button .navcount{margin-left:auto;background:var(--gold);color:#1a1300;
 table.mini{width:100%;font-size:14px}table.mini td,table.mini th{padding:6px 4px;border-bottom:1px solid var(--pline);text-align:left}
 table.mini td.n,table.mini th.n{text-align:right;font-family:var(--num)}
 table.mini tr.hl td{background:rgba(91,75,214,.14)}
+.charttable{margin-top:8px;font-size:13.5px}
+.charttable>summary{color:var(--lilac);font-weight:600;width:max-content}
+.charttable[open]>summary{margin-bottom:6px}
+.charttable .tablewrap{max-height:320px;overflow:auto}
+.charttable tbody th{font:inherit;text-transform:none;letter-spacing:0;color:var(--ink2);font-weight:500}
 .oddrow{padding:12px 0;border-bottom:1px solid var(--pline);display:grid;gap:10px}.oddrow:last-of-type{border-bottom:0}
 .od-top{display:flex;justify-content:space-between;gap:12px;align-items:center}.od-p{font:700 30px var(--display)}
 .range{position:relative;height:12px;background:rgba(169,155,255,.08);border-radius:999px}

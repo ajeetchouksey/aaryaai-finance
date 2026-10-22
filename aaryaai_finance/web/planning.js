@@ -17,13 +17,14 @@ const rowItem = (main, sub, right = "", right2 = "") => `<div class="li"><div cl
   <div class="li-r">${right ? `<div>${right}</div>` : ""}${right2 ? `<div>${right2}</div>` : ""}</div></div>`;
 const bar = (pct, color, h = 8) => `<div class="pbar" style="height:${h}px"><i style="width:${Math.max(0, Math.min(100, pct))}%;background:${color}"></i></div>`;
 function hstack(parts, h = 16) {
-  return `<div class="hstack" style="height:${h}px">${parts.filter((p) => p.pct > 0.2).map((p) => `<i style="width:${p.pct}%;background:${p.color}" title="${esc(p.label)} ${p.pct.toFixed(0)}%"></i>`).join("")}</div>`;
+  const said = parts.filter((p) => p.pct > 0.2).map((p) => `${p.label} ${Math.round(p.pct)}%`).join(", ");
+  return `<div class="hstack" role="img" aria-label="${esc(said)}" style="height:${h}px">${parts.filter((p) => p.pct > 0.2).map((p) => `<i style="width:${p.pct}%;background:${p.color}" title="${esc(p.label)} ${p.pct.toFixed(0)}%"></i>`).join("")}</div>`;
 }
 const legendRow = (items) => `<div class="legend">${items.map(([t, c]) => `<span><i style="background:${c}"></i>${t}</span>`).join("")}</div>`;
 const PALETTE = ["#5b4bd6", "#38bdf8", "#a99bff", "#34d399", "#fbbf24", "#f472b6", "#fb923c", "#2dd4bf", "#94a3b8"];
 
 // Vertical bars that can go below zero, with an optional floor line. rows: [{label, v, color, note}]
-function vbars(rows, { h = 170, floor = null, floorLabel = "", fmt = (v) => v } = {}) {
+function vbars(rows, { h = 170, floor = null, floorLabel = "", fmt = (v) => v, title = "Bar chart" } = {}) {
   const vals = rows.map((r) => r.v).concat(floor != null ? [floor] : []);
   let max = Math.max(0, ...vals), min = Math.min(0, ...vals);
   if (max === min) max = min + 1;
@@ -36,7 +37,11 @@ function vbars(rows, { h = 170, floor = null, floorLabel = "", fmt = (v) => v } 
       <div class="vb-lab">${esc(r.label)}</div></div>`;
   }).join("");
   const fl = floor != null ? `<div class="vb-floor" style="top:${y(floor)}px"></div><div class="vb-floorlab" style="top:${y(floor) - 17}px">${floorLabel}</div>` : "";
-  return `<div class="vbars"><div class="vb-zero" style="top:${zero}px"></div>${fl}${cols}</div>`;
+  const low = rows.reduce((a, r) => (r.v < a.v ? r : a), rows[0] || { v: 0, label: "" });
+  const said = `${title}: ${rows.length} bars` + (rows.length ? `, ${rows[0].label} to ${rows[rows.length - 1].label}; lowest bar ${fmt(low.v)} in ${low.label}` : "") +
+    (floor != null ? `; ${floorLabel || "floor " + fmt(floor)}` : "") + ".";
+  return `<div class="vbars" role="img" aria-label="${esc(said)}"><div class="vb-zero" style="top:${zero}px"></div>${fl}${cols}</div>
+    <details class="charttable"><summary>View as table</summary><div class="tablewrap">${tableHTML(title, ["", "Amount"], rows.map((r) => [r.label, fmt(r.v)]))}</div></details>`;
 }
 
 async function decideProposal(id, decision, after) {
@@ -106,7 +111,8 @@ loaders.home = async () => {
     hstack(ccys.map((c) => ({ pct: byc[c] / tot * 100, color: ccyColor(c), label: c }))) +
     `<div class="ccycols">${ccys.slice(0, 3).map((c) => { const nat = conv(byc[c], base, c); return `<div><div class="lbl" style="color:${ccyColor(c)}">${esc(c)}</div>
       <div class="big num">${money(nat ?? byc[c], nat == null ? base : c, 0)}</div><div class="li-s">${pctText(byc[c] / tot)}${c !== base ? " · ≈ " + money(byc[c], base, 0) : ""}</div></div>`; }).join("")}</div>` +
-    (hist.length > 1 ? `<div class="lbl" style="margin-top:14px">Last ${hist.length} snapshots</div><div class="spark">${hist.map((h, i) => `<i style="height:${Math.max(4, h.net_worth / hmax * 100)}%;background:${i === hist.length - 1 ? css("--lilac") : "rgba(169,155,255,.45)"}" title="${esc(h.day)}: ${esc(money(h.net_worth, base, 0))}"></i>`).join("")}</div>` : "");
+    (hist.length > 1 ? `<div class="lbl" style="margin-top:14px">Last ${hist.length} snapshots</div><div class="spark" role="img" aria-label="${esc(`Net worth, last ${hist.length} snapshots: ${money(hist[0].net_worth, base, 0)} on ${hist[0].day} to ${money(hist[hist.length - 1].net_worth, base, 0)} on ${hist[hist.length - 1].day}`)}">${hist.map((h, i) => `<i style="height:${Math.max(4, h.net_worth / hmax * 100)}%;background:${i === hist.length - 1 ? css("--lilac") : "rgba(169,155,255,.45)"}" title="${esc(h.day)}: ${esc(money(h.net_worth, base, 0))}"></i>`).join("")}</div>
+      <details class="charttable"><summary>View as table</summary><div class="tablewrap">${tableHTML("Net worth snapshots", ["", "Net worth"], hist.map((h) => [h.day, money(h.net_worth, base, 0)]))}</div></details>` : "");
 
   $("#homeComing").innerHTML = hdr("Coming up", "next 45 days", `<button class="sm ghost" onclick="go('forecast')">Forecast</button>`) +
     (d.coming.slice(0, 7).map((c) => c.kind === "deadline"
@@ -157,7 +163,8 @@ loaders.forecast = async () => {
       note: r.month === lo.month ? (HIDE ? "•••" : (r.low / scale).toFixed(scale === 1e5 ? 2 : 1)) : "" }));
     const without = lo.without_plan < lo.low - 1 ? `<div class="li-s">Without the funding plan, the lowest point would be <b class="neg">${money(lo.without_plan, c, 0)}</b>.</div>` : "";
     return `<div class="card">${hdr(`${esc(c)} · month-end balance`, `in ${unit} ${esc(c)}`, chip(`Lowest ${money(lo.low, c, 0)} in ${monthLabel(lo.month)}`, lo.below_floor ? "bad" : "muted"))}
-      ${vbars(data.map((x) => ({ ...x, v: x.v / scale })), { floor: fl / scale, floorLabel: `floor ${HIDE ? "•••" : money(fl, c, 0)}`, fmt: (v) => money(v * scale, c, 0) })}
+      ${vbars(data.map((x) => ({ ...x, v: x.v / scale })), { floor: fl / scale, floorLabel: `floor ${HIDE ? "•••" : money(fl, c, 0)}`, fmt: (v) => money(v * scale, c, 0),
+        title: `${c} month-end balance, next 12 months` })}
       ${legendRow([["Above floor", col], ["Below floor", css("--bad")], ["Floor", css("--gold")]])}${without}</div>`;
   }).join("") || emptyBox("Add accounts in Money and mark them “available within a week” to see a forecast.");
 

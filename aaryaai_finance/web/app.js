@@ -91,7 +91,7 @@ window.toggleTheme = () => {
 // category colours stay neutral so blue/red always mean EUR/INR
 const palette = () => ["#5b4bd6", "#fbbf24", "#34d399", "#f472b6", "#fb923c", "#2dd4bf", "#c4b5fd", "#64748b"];
 const charts = {};
-function chart(id, cfg) {
+function chart(id, cfg, a11y = {}) {
   if (!window.Chart) return;
   Chart.defaults.font.family = css("--body"); Chart.defaults.color = css("--muted");
   Chart.defaults.borderColor = css("--line");
@@ -99,6 +99,58 @@ function chart(id, cfg) {
   charts[id]?.destroy();
   cfg.options = { responsive: true, maintainAspectRatio: false, animation: { duration: 700 }, ...(cfg.options || {}) };
   charts[id] = new Chart($("#" + id), cfg);
+  describeChart(id, cfg, a11y);
+}
+function unchart(id) {
+  charts[id]?.destroy(); delete charts[id];
+  const det = chartTable($("#" + id)); if (det) det.hidden = true;
+}
+// Every chart also says what it shows: a summary screen readers speak (the canvas's label) and the same numbers in a
+// table under it ("View as table"). Amounts go through the chart's own formatter, so Hide amounts masks them too.
+const chartTable = (cv) => { const box = cv?.closest(".chartbox") || cv; const n = box?.nextElementSibling; return n?.classList.contains("charttable") ? n : null; };
+function chartTitle(cv) {
+  const h = cv.closest(".card")?.querySelector("h3");
+  if (!h) return "Chart";
+  const main = [...h.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(" ").trim();
+  const sub = h.querySelector(".sub")?.textContent.trim();
+  return main + (sub ? ` (${sub})` : "");
+}
+function tableHTML(caption, head, rows) {
+  return `<table class="mini"><caption class="vh">${esc(caption)}</caption><thead><tr>${head.map((h, i) => `<th scope="col"${i ? ' class="n"' : ""}>${esc(h)}</th>`).join("")}</tr></thead>
+    <tbody>${rows.map((r) => `<tr><th scope="row">${esc(r[0])}</th>${r.slice(1).map((c) => `<td class="n">${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+}
+function describeChart(id, cfg, { fmt = (v) => money(v), xfmt = String, title } = {}) {
+  const cv = $("#" + id); if (!cv) return;
+  const sets = cfg.data.datasets || [], name = title || chartTitle(cv);
+  const num = (v) => (v == null || Number.isNaN(Number(v)) ? null : Number(v));
+  let summary, head, rows;
+  if (cfg.type === "doughnut") {
+    const d = (sets[0]?.data || []).map((v) => num(v) || 0), tot = d.reduce((a, b) => a + b, 0) || 1;
+    const parts = (cfg.data.labels || []).map((l, i) => [String(l), d[i]]).sort((a, b) => b[1] - a[1]);
+    summary = `${name}: ${parts.length} parts. ` + parts.slice(0, 4).map(([l, v]) => `${l} ${fmt(v)} (${pct(v / tot, 0)})`).join(", ") + (parts.length > 4 ? ", and more." : ".");
+    head = ["", "Amount", "Share"]; rows = parts.map(([l, v]) => [l, fmt(v), pct(v / tot, 0)]);
+  } else {
+    const xy = sets.some((s) => s.data.some((p) => p && typeof p === "object"));     // {x, y} points instead of labels
+    const keys = xy ? [...new Set(sets.flatMap((s) => s.data.map((p) => p.x)))].sort((a, b) => a - b) : (cfg.data.labels || []).map((_, i) => i);
+    const cell = (s, k) => num(xy ? s.data.find((p) => p.x === k)?.y : s.data[k]);
+    const label = (k) => { if (!xy) return String(cfg.data.labels[k]); const n = sets.map((s) => s.data.find((p) => p.x === k)?.l).find(Boolean); return xfmt(k) + (n ? ` · ${n}` : ""); };
+    summary = `${name}: ${cfg.type === "bar" ? "bar" : "line"} chart` + (keys.length ? `, ${label(keys[0])} to ${label(keys[keys.length - 1])}. ` : ". ") + sets.map((s) => {
+      const vs = keys.map((k) => cell(s, k)).filter((v) => v != null);
+      return vs.length ? `${s.label}: ${fmt(vs[0])} to ${fmt(vs[vs.length - 1])}, lowest ${fmt(Math.min(...vs))}, highest ${fmt(Math.max(...vs))}.` : "";
+    }).join(" ");
+    const step = Math.ceil(keys.length / 60);                          // long histories: every n-th point, and always the last
+    head = ["", ...sets.map((s) => s.label)];
+    rows = keys.filter((_, i) => i % step === 0 || i === keys.length - 1).map((k) => [label(k), ...sets.map((s) => cell(s, k) == null ? "—" : fmt(cell(s, k)))]);
+    if (step > 1) head[0] = `every ${step}th point`;
+  }
+  cv.setAttribute("role", "img"); cv.setAttribute("aria-label", summary.trim());
+  let det = chartTable(cv);
+  if (!det) {
+    (cv.closest(".chartbox") || cv).insertAdjacentHTML("afterend", `<details class="charttable"><summary>View as table</summary><div class="tablewrap"></div></details>`);
+    det = chartTable(cv);
+  }
+  det.hidden = false;
+  det.querySelector(".tablewrap").innerHTML = tableHTML(name, head, rows);
 }
 const doughnut = (labels, data, center) => ({ type: "doughnut",
   data: { labels, datasets: [{ data, backgroundColor: palette(), borderColor: css("--paper"), borderWidth: 3, hoverOffset: 6 }] },
@@ -428,8 +480,8 @@ loaders.position = async () => {
   $("#nextDeadlines").innerHTML = timeline(p.open_deadlines.slice(0, 5), { compact: true }) || `<div class="empty">Nothing due — or switch on your countries in Settings.</div>`;
   const hasCat = Object.keys(n.by_category).length;
   $("#chCat").hidden = !hasCat; $("#chCatEmpty")?.remove();
-  if (hasCat) chart("chCat", doughnut(Object.keys(n.by_category), Object.values(n.by_category), [compact(n.assets, base), "you own"]));
-  else { charts.chCat?.destroy(); delete charts.chCat; $("#chCat").insertAdjacentHTML("afterend", `<div class="empty" id="chCatEmpty">Add an account, asset or holding and this shows how your money is split.</div>`); }
+  if (hasCat) chart("chCat", doughnut(Object.keys(n.by_category), Object.values(n.by_category), [compact(n.assets, base), "you own"]), { fmt: (v) => money(v, base, 0) });
+  else { unchart("chCat"); $("#chCat").insertAdjacentHTML("afterend", `<div class="empty" id="chCatEmpty">Add an account, asset or holding and this shows how your money is split.</div>`); }
   drawOutlook(hist, n.net_worth, cf?.savings || 0);
   $("#itemsTbl").innerHTML = `<thead><tr><th>Name</th><th>Type</th><th class="n">Amount</th><th>Liquid</th><th>Updated</th></tr></thead><tbody>` +
     (items.map((i) => `<tr class="click" tabindex="0" onclick="editItem(${i.id})"><td>${esc(i.name)}${i.note ? `<div class="hint" style="font-weight:400">${esc(i.note)}</div>` : ""}</td>
@@ -492,7 +544,8 @@ function journeyChart(id, g) {
         y: { min: 0, ticks: { maxTicksLimit: 5, callback: (v) => compact(v, c) } } } },
     plugins: [{ id: "today", afterDraw(ch) { const x = ch.scales.x.getPixelForValue(today), { top, bottom } = ch.chartArea; const k = ch.ctx;
       k.save(); k.strokeStyle = "rgba(52,211,153,.6)"; k.setLineDash([3, 3]); k.beginPath(); k.moveTo(x, top); k.lineTo(x, bottom); k.stroke();
-      k.fillStyle = css("--good"); k.font = `500 10px ${css("--num")}`; k.fillText("TODAY", x + 5, top + 10); k.restore(); } }] });
+      k.fillStyle = css("--good"); k.font = `500 10px ${css("--num")}`; k.fillText("TODAY", x + 5, top + 10); k.restore(); } }] },
+    { fmt: (v) => money(v, c, 0), xfmt: (x) => new Date(x).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) });
 }
 function drawOutlook(hist, nw, savings) {
   const now = new Date(), labels = [], proj = [], past = [];
@@ -504,7 +557,7 @@ function drawOutlook(hist, nw, savings) {
       { label: "So far", data: past, borderColor: col, borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: col, tension: .3 },
       { label: "Outlook", data: proj, borderColor: col, borderDash: [6, 5], borderWidth: 2, pointRadius: 0, fill: true, backgroundColor: (c) => areaGradient(c, "#38bdf8"), tension: .3 }] },
     options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${money(c.raw)}` } } },
-      scales: { y: { ticks: { maxTicksLimit: 5, callback: (v) => compact(v) } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 7 } } } } });
+      scales: { y: { ticks: { maxTicksLimit: 5, callback: (v) => compact(v) } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 7 } } } } }, { fmt: (v) => money(v, BASE(), 0) });
   $("#outlookNote").textContent = savings > 0 ? `Saving ${money(savings)} a month adds about ${money(savings * 12)} in a year — reaching ≈ ${money(nw + savings * 12)} by ${labels[labels.length - 1]}, before investment growth or currency moves.`
     : "Log your income and spending in Money to see where your net worth is heading.";
 }
@@ -558,7 +611,8 @@ loaders.goals = async () => {
       datasets: [{ label: "Projected", data: g.path.map((p) => p.balance), borderColor: col, borderWidth: 2.5, fill: true, backgroundColor: (c) => areaGradient(c, col), tension: .3, pointRadius: 0 },
                  { label: "Target", data: g.path.map((p) => p.target), borderColor: css("--gold"), borderDash: [5, 5], borderWidth: 2, pointRadius: 0 }] },
       options: { plugins: { legend: { position: "bottom", labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${money(c.raw, g.currency)}` } } },
-        scales: { x: { ticks: { maxTicksLimit: 6 }, grid: { display: false } }, y: { ticks: { maxTicksLimit: 4, callback: (v) => compact(v, g.currency) } } } } });
+        scales: { x: { ticks: { maxTicksLimit: 6 }, grid: { display: false } }, y: { ticks: { maxTicksLimit: 4, callback: (v) => compact(v, g.currency) } } } } },
+      { fmt: (v) => money(v, g.currency, 0), title: `${g.name}: projected savings against the target` });
   });
 };
 window.editGoal = (id) => {
@@ -660,7 +714,7 @@ loaders.invest = async () => {
     (rows.join("") || `<tr><td colspan="6"><div class="empty">No holdings yet — add your ETFs, funds, shares or pension accounts.<br><button class="sm" onclick="editHolding()">＋ Add a holding</button></div></td></tr>`) + "</tbody>";
   $("#invKpis").innerHTML = kpi("Invested value", eur(val)) + kpi("Paid in", eur(cost)) +
     kpi("Gain / loss", `<span class="${val - cost >= 0 ? "pos" : "neg"}">${val - cost >= 0 ? "+" : ""}${eur(val - cost)}</span>`, cost ? pct((val - cost) / cost) + " overall" : "");
-  chart("chAlloc", doughnut(Object.keys(alloc), Object.values(alloc), [eur(val), "invested"]));
+  chart("chAlloc", doughnut(Object.keys(alloc), Object.values(alloc), [eur(val), "invested"]), { fmt: (v) => eur(v, 0) });
 };
 window.editHolding = (id) => {
   const row = HOLD.find((x) => x.id === id) || { asset_type: "ETF", currency: BASE(), country: CFG.countries?.[0] || "" };
@@ -1177,10 +1231,10 @@ loaders.money = async () => {
       { label: "In", data: sum.trend.map((t) => t.income), backgroundColor: "#34d399", borderRadius: 6, maxBarThickness: 26 },
       { label: "Out", data: sum.trend.map((t) => t.expense), backgroundColor: "#fb7185", borderRadius: 6, maxBarThickness: 26 }] },
     options: { plugins: { legend: { position: "bottom", labels: { boxWidth: 10, usePointStyle: true } }, tooltip: { callbacks: { label: (x) => ` ${x.dataset.label}: ${fmtC(x.raw, c)}` } } },
-      scales: { x: { grid: { display: false } }, y: { ticks: { maxTicksLimit: 5, callback: (v) => compact(v, c) } } } } });
+      scales: { x: { grid: { display: false } }, y: { ticks: { maxTicksLimit: 5, callback: (v) => compact(v, c) } } } } }, { fmt: (v) => fmtC(v, c) });
   const cats = Object.entries(sum.by_category);
-  if (cats.length) chart("chCats", doughnut(cats.map((x) => x[0]), cats.map((x) => x[1]), [fmtC(sum.expense, c), "spent"]));
-  else { charts.chCats?.destroy(); delete charts.chCats; }
+  if (cats.length) chart("chCats", doughnut(cats.map((x) => x[0]), cats.map((x) => x[1]), [fmtC(sum.expense, c), "spent"]), { fmt: (v) => fmtC(v, c) });
+  else unchart("chCats");
   // transactions
   MONEY.tx = sum.transactions; MONEY.hasAccounts = acc.accounts.length > 0;
   const usedCats = [...new Set(MONEY.tx.map((t) => t.category).filter(Boolean))].sort(), keepCat = $("#txCat").value;
