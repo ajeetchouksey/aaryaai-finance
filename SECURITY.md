@@ -24,4 +24,4 @@ The app doesn't encrypt its data folder. Use disk encryption (BitLocker, FileVau
 
 ## Dependencies
 
-Dependabot proposes Python and GitHub Actions updates, CodeQL scans the code, and CI runs `pip-audit`. Vendored JavaScript and its versions are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
+Workflow actions are pinned to a commit (the version is in a comment beside it). Dependabot proposes Python and GitHub Actions updates, including those pins, CodeQL scans the code, and CI runs `pip-audit`. Vendored JavaScript and its versions are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
