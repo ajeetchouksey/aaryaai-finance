@@ -297,7 +297,8 @@ async function drawOdds() {
 }
 
 // ---------------------------------------------------------------- DIVERSIFY
-const CLS_COLOR = { shares: "indigo", bonds: "green", cash: "sky", property: "gold", gold: "sand", pension: "lilac", other: "grey" };
+// gold and pension were too close to property and shares (checked all pairs, both themes); "other" stays neutral grey
+const CLS_COLOR = { shares: "indigo", bonds: "green", cash: "sky", property: "gold", gold: "orange", pension: "lavender", other: "grey" };
 const clsColor = (k) => tone(CLS_COLOR[k] || "grey");
 loaders.diversify = async () => {
   const d = await api("/diversify");
