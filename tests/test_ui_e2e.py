@@ -279,7 +279,8 @@ def test_approve_a_proposal_and_see_it_in_the_audit_log(page):
 
 def test_run_a_routine(page):
     go(page, "routines", "#rtList .rt-item")
-    assert page.locator("#rtList .rt-item").count() == 5
+    from aaryaai_finance.core.routines import ROUTINES
+    assert page.locator("#rtList .rt-item").count() == len(ROUTINES)
     page.locator("#rtList .rt-item", has_text="Forecast refresh").locator("button:has-text('Run')").click()
     page.wait_for_function("document.querySelector('#toast').textContent.startsWith('Ran 1 routine')")
 

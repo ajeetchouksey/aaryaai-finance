@@ -23,6 +23,8 @@ ROUTINES = [
      "about": "Last month's income, spending and savings rate; proposes goal changes that fit your surplus."},
     {"id": "tax_prep", "label": "Tax-year prep", "every": "monthly",
      "about": "Checks which documents for last year's return are still missing (from February for calendar years, from May for India)."},
+    {"id": "repeat_finder", "label": "Repeating payments", "every": "weekly",
+     "about": "Spots income and spending that comes back every month (3+ months in a row, similar amount and day) and proposes making it a repeating entry."},
     {"id": "exchange_rates", "label": "Exchange rates", "every": "daily",
      "about": "Refreshes European Central Bank rates. Skipped when you use manual rates."},
 ]
@@ -210,12 +212,31 @@ def tax_prep(ctx) -> dict:
     return {"text": "; ".join(lines) or "Nothing to prepare yet."}
 
 
+def repeat_finder(ctx) -> dict:
+    from .patterns import find_monthly
+    accts = {a["id"]: a for a in ctx.db.list("accounts")}
+    found = find_monthly(ctx.db.list("transactions"), ctx.db.list("recurring"), date.today())
+    proposed = 0
+    for f in found:
+        a = accts.get(f["account_id"])
+        if not a:
+            continue
+        what = f["note"] or f["category"] or f["kind"]
+        row = {"kind": f["kind"], "account_id": f["account_id"], "amount": f["amount"], "category": f["category"], "note": f["note"],
+               "frequency": "monthly", "start_date": f["next_date"], "active": 1}
+        if ctx.propose(f["key"], "Repeating payments", f"Make “{what}” repeat monthly: {f['amount']:,.2f} {a['currency']} around the {f['day']}.",
+                       f"Seen in {f['months']} months in a row in {a['name']}, last on {f['last_date']}. Starts {f['next_date']}; nothing already logged is doubled.",
+                       "fills in your cash forecast", {"type": "add_recurring", "row": row}):
+            proposed += 1
+    return {"text": f"{len(found)} monthly pattern(s) found" + (f"; {proposed} proposed." if proposed else "."), "found": len(found)}
+
+
 def exchange_rates(ctx) -> dict:
     return {"text": ctx.refresh_fx()}
 
 
 RUNNERS = {"forecast_refresh": forecast_refresh, "deadline_sweep": deadline_sweep, "monthly_review": monthly_review,
-           "tax_prep": tax_prep, "exchange_rates": exchange_rates}
+           "tax_prep": tax_prep, "repeat_finder": repeat_finder, "exchange_rates": exchange_rates}
 
 
 def start_background(get_ctx, every_seconds: int = 900) -> threading.Thread:
