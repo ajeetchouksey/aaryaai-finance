@@ -80,9 +80,18 @@ def de_income_tax(zve: float, tariff: list) -> int:
     return math.floor(t)
 
 
+def _for_year(table: dict, year: int, what: str):
+    """A value the pack keeps per tax year. A missing year is an error, never silently another year's numbers."""
+    v = table.get(year, table.get(str(year)))
+    if v is None:
+        have = sorted(int(k) for k in table)
+        raise ValueError(f"The country pack has no {what} for {year} (it has {', '.join(map(str, have)) or 'none'}). "
+                         "Update the app or the pack's params.")
+    return v
+
+
 def _tariff(p, year):
-    t = p["tariffs"]
-    return t.get(year) or t.get(str(year)) or t[max(t, key=lambda k: int(k))]
+    return _for_year(p["tariffs"], year, "income tax tariff")
 
 
 @engine("de_32a_refund")
@@ -94,8 +103,7 @@ def de_refund(p, i, ccy):
     wk = max(_n(i.get("werbungskosten")), _n(p.get("workers_allowance", 1230)))
     zve = max(gross - wk - _n(i.get("vorsorge")) - _n(i.get("other")), 0)
     est = 2 * de_income_tax(zve / 2, tariff) if joint else de_income_tax(zve, tariff)
-    fg = p.get("soli_freigrenze", {})
-    free = _n(fg.get(year) or fg.get(str(year)) or 0) * (2 if joint else 1)
+    free = _n(_for_year(p.get("soli_freigrenze", {}), year, "Soli threshold")) * (2 if joint else 1)
     soli = 0.0 if est <= free else round(min(0.055 * est, 0.119 * (est - free)), 2)
     kist = round(est * _n(p.get("church_rate", 0.09)), 2) if church else 0.0
     total = est + soli + kist
