@@ -10,8 +10,7 @@ from datetime import date
 from typing import Callable, Iterator
 
 from ..core import ledger, planning, trading
-from ..tax import engines
-from .providers import Event, Final
+from .providers import Final
 
 BASE_SYSTEM = """You are the personal-finance companion inside aaryaai-finance, a local app.
 

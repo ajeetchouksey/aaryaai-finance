@@ -171,7 +171,7 @@ class OpenAICompatProvider(BaseProvider):
         ot = to_openai_tools(tools)
         if ot:
             body["tools"] = ot
-        text, calls, finish = "", {}, "stop"
+        text, calls = "", {}
         try:
             with httpx.stream("POST", self.url, params=self.params, headers=self.headers, json=body, timeout=120) as r:
                 if r.status_code >= 400:
@@ -200,8 +200,6 @@ class OpenAICompatProvider(BaseProvider):
                                 slot["name"] = fn["name"]
                                 yield Event("tool_start", name=fn["name"])
                             slot["args"] += fn.get("arguments") or ""
-                        if ch.get("finish_reason"):
-                            finish = ch["finish_reason"]
         except Exception as e:  # noqa: BLE001
             yield Event("error", text=_friendly(e))
             return
