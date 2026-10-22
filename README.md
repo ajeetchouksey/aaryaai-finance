@@ -60,7 +60,7 @@ Options: `aaryaai-finance --data-dir PATH --port 8770 --no-browser --no-routines
 | **Deadlines** | Deadlines from your packs, calculators (e.g. German refund estimate, India old vs new regime), checklists |
 | **Routines** | Scheduled checks, proposals to approve, connections (AI, MCP), audit log |
 | **Rules** | Test a document against the rules, write your own rules in YAML |
-| **Ask AI** | Chat that can read your snapshot, forecast, odds and tax status, run calculators and log entries |
+| **Ask AI** | Chat that can read your snapshot, forecast, odds and tax status, run calculators and suggest entries, goals or accounts for you to approve |
 
 ## Your data folder
 

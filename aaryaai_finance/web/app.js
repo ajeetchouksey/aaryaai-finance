@@ -49,11 +49,15 @@ const compact = (v, c = BASE()) => HIDE ? (SYM[c] ?? c + " ") + "•••" : c 
 const lakh = (v) => compact(v, "INR");
 const conv = (v, from, to = BASE()) => { const r = CFG.rates || {}; if (from === to) return v; if (!r[from] || !r[to]) return null; return v / r[from] * r[to]; };
 const packFor = (code) => CFG.packs.find((p) => p.code === code);
-const flagFor = (code) => packFor(code)?.flag || "";
+const flagFor = (code) => esc(packFor(code)?.flag || "");
 const countryName = (code) => packFor(code)?.name || code || "Other";
 const ccyCountry = (c) => CFG.packs.find((p) => p.currency === c);
 const pct = (v, d = 1) => (v * 100).toFixed(d) + "%";
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// A value as a JavaScript string literal that is safe inside a double-quoted HTML attribute: onclick="fn(${jsArg(x)})".
+const jsArg = (v) => esc(JSON.stringify(String(v ?? "")));
+// Only https links from outside the app (e.g. the update notice) become clickable.
+const safeUrl = (u) => /^https:\/\//i.test(String(u || "")) ? esc(u) : "";
 const toast = (m) => { const t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.tm); toast.tm = setTimeout(() => t.classList.remove("show"), Math.max(2600, String(m).length * 55)); };
 const kpi = (l, v, s = "", extra = "") => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div>${extra}</div>`;
 const meter = (f, color) => `<div class="meter"><i style="width:${Math.max(0, Math.min(1, f)) * 100}%;${color ? "background:" + color : ""}"></i></div>`;
@@ -199,8 +203,8 @@ window.openRecords = async (entity) => {
   $("#recordsCard").hidden = false;
   $("#recTitle").innerHTML = `${esc(ent.label)} <span class="hint" style="font-size:13px">${rows.length} · defined in ${esc(ent.source)}</span>`;
   $("#setRecords").innerHTML = `<div class="tablewrap"><table><thead><tr>${cols.map(([k, f]) => `<th>${esc(f.label || k)}</th>`).join("")}</tr></thead><tbody>
-    ${rows.map((r) => `<tr class="click" onclick="editRecord('${entity}', ${r.id})">${cols.map(([k, f]) => `<td>${show(f, r[k])}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${cols.length}" class="hint">Nothing yet.</td></tr>`}</tbody></table></div>
-    <div style="display:flex;gap:8px;margin-top:10px"><button class="sm" onclick="editRecord('${entity}')">＋ Add ${esc(ent.label.toLowerCase())}</button><button class="sm ghost" onclick="$('#recordsCard').hidden=true">Close</button></div>`;
+    ${rows.map((r) => `<tr class="click" onclick="editRecord(${jsArg(entity)}, ${Number(r.id)})">${cols.map(([k, f]) => `<td>${show(f, r[k])}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${cols.length}" class="hint">Nothing yet.</td></tr>`}</tbody></table></div>
+    <div style="display:flex;gap:8px;margin-top:10px"><button class="sm" onclick="editRecord(${jsArg(entity)})">＋ Add ${esc(ent.label.toLowerCase())}</button><button class="sm ghost" onclick="$('#recordsCard').hidden=true">Close</button></div>`;
   window._recs = { entity, rows, refs };
   $("#recordsCard").scrollIntoView({ behavior: "smooth", block: "start" });
 };
@@ -239,15 +243,15 @@ function timeline(items, { actions = false, compact = false } = {}) {
     const m = dt ? `${MON[dt.getMonth()]} ${dt.getFullYear()}` : "Every time";
     const head = !compact && m !== month ? `<div class="tl-month">${m}</div>` : ""; month = m;
     const sev = c.status === "done" ? "done" : c.severity;
-    const q = JSON.stringify("Explain in simple words what I need to do for: " + c.title + " — and how, step by step.").replace(/'/g, "&#39;");
+    const q = "Explain in simple words what I need to do for: " + c.title + " — and how, step by step.";
     return head + `<div class="tl-item ${c.status === "done" ? "done" : ""}" style="--tc:${ccyColor(packFor(c.country)?.currency)}">
       <div class="tl-date" style="border-top:3px solid var(--tc)">${dt ? `<b>${dt.getDate()}</b><span>${MON[dt.getMonth()]}</span>` : `<b>∞</b><span>always</span>`}</div>
       <div><div class="tl-title">${esc(hideAmt(c.title))}</div>
         <div class="tl-meta">${countryTag(c.country)}${c.origin === "yours" ? `<span class="srcbadge yours">yours</span>` : ""}
-        ${sev !== "normal" ? `<span class="tag ${sev}">${sev === "critical" ? "Critical" : sev === "high" ? "Important" : "Done"}</span>` : ""}
+        ${sev !== "normal" ? `<span class="tag ${esc(sev)}">${sev === "critical" ? "Critical" : sev === "high" ? "Important" : "Done"}</span>` : ""}
         ${compact ? countdown(c.due) : ""}</div></div>
-      ${actions ? `<div class="tl-actions">${countdown(c.due)}<button class="sm ${c.status === "done" ? "ghost" : ""}" onclick='toggleCal(${JSON.stringify(c.key)}, "${c.status}")'>${c.status === "done" ? "Reopen" : "Mark done"}</button>
-        ${c.status !== "done" ? `<button class="sm ghost ask" onclick='askClaude(${q})'>Ask</button>` : ""}
+      ${actions ? `<div class="tl-actions">${countdown(c.due)}<button class="sm ${c.status === "done" ? "ghost" : ""}" onclick="toggleCal(${jsArg(c.key)}, ${jsArg(c.status)})">${c.status === "done" ? "Reopen" : "Mark done"}</button>
+        ${c.status !== "done" ? `<button class="sm ghost ask" onclick="askClaude(${jsArg(q)})">Ask</button>` : ""}
         ${c.origin === "yours" && c.id ? `<button class="sm ghost" onclick="delDeadline(${c.id})">Delete</button>` : ""}</div>` : ""}
       ${actions && c.detail ? `<details><summary>What to do &amp; why</summary><p>${esc(hideAmt(c.detail))}</p><p class="hint">Source: ${esc(c.source || "")}</p></details>` : ""}
     </div>`;
@@ -277,7 +281,7 @@ function drawWizard() {
   if (WIZ.step === 1) {
     const packs = o.packs;
     b.innerHTML = `<h2>Your countries</h2><p class="lead">Each country is a <b>pack</b> of readable rules: currency, tax calculators, deadlines and document types. Pick every country you have money or tax in.</p>
-      <div class="packpick">${packs.map((p) => `<label><input type="checkbox" value="${p.code}" ${d.countries.includes(p.code) ? "checked" : ""}><span class="fl">${p.flag}</span><b>${esc(p.name)}</b><small>${p.currency} · ${p.source}</small></label>`).join("")}</div>
+      <div class="packpick">${packs.map((p) => `<label><input type="checkbox" value="${esc(p.code)}" ${d.countries.includes(p.code) ? "checked" : ""}><span class="fl">${esc(p.flag)}</span><b>${esc(p.name)}</b><small>${esc(p.currency)} · ${esc(p.source)}</small></label>`).join("")}</div>
       <div class="form row2"><label>Base currency — totals are shown in this <select id="wBase">${[...new Set([...packs.map((p) => p.currency), ...o.currencies])].map((c) => `<option ${c === (d.base_currency || packs.find((p) => d.countries.includes(p.code))?.currency) ? "selected" : ""}>${c}</option>`).join("")}</select></label>
       <label>Other currencies you hold (comma-separated) <input id="wExtra" value="${esc((d.extra_currencies || []).join(", "))}" placeholder="e.g. USD, CHF"></label></div>
       <div id="wQs"></div><p class="hint">Missing your country? Copy <code>packs/_template</code> — see CONTRIBUTING.md. You can switch countries later in Settings.</p>`;
@@ -285,7 +289,7 @@ function drawWizard() {
       const sel = $$(".packpick input:checked").map((x) => x.value);
       const qs = packs.filter((p) => sel.includes(p.code)).flatMap((p) => (p.questions || []).map((q) => ({ ...q, flag: p.flag })));
       $("#wQs").innerHTML = qs.length ? `<p class="lead" style="margin:10px 0 4px">A few yes/no questions decide which deadlines apply to you:</p><div class="qlist">${qs.map((q) =>
-        `<label><input type="checkbox" data-q="${q.id}" ${d.answers[q.id] ? "checked" : ""}><span class="fl">${q.flag}</span><span>${esc(q.label)}</span></label>`).join("")}</div>` : "";
+        `<label><input type="checkbox" data-q="${esc(q.id)}" ${d.answers[q.id] ? "checked" : ""}><span class="fl">${esc(q.flag)}</span><span>${esc(q.label)}</span></label>`).join("")}</div>` : "";
       if (!d.base_currency) { const first = packs.find((p) => sel.includes(p.code)); if (first) $("#wBase").value = first.currency; }
     };
     $$(".packpick input").forEach((x) => x.onchange = drawQs); drawQs();
@@ -299,7 +303,7 @@ function drawWizard() {
       <div class="provpick">${Object.entries(pv).map(([k, v]) => `<label><input type="radio" name="prov" value="${k}" ${d.ai.provider === k ? "checked" : ""}>${esc(v.label)}</label>`).join("")}</div>
       <div id="wAI" class="form"></div>
       ${(o.mcp_clients || []).length ? `<div class="form" style="margin-top:14px"><p class="lead" style="margin:0">Also use your numbers in an AI app you already have? It adds aaryaai-finance to its MCP settings (a backup is kept); the app can then read your numbers and suggest changes for you to approve.</p>
-        ${o.mcp_clients.map((c) => `<label class="chk"><input type="checkbox" data-mcp="${c.id}" ${(d.mcp_clients || []).includes(c.id) ? "checked" : ""}> Connect ${esc(c.label)}</label>`).join("")}</div>` : ""}`;
+        ${o.mcp_clients.map((c) => `<label class="chk"><input type="checkbox" data-mcp="${esc(c.id)}" ${(d.mcp_clients || []).includes(c.id) ? "checked" : ""}> Connect ${esc(c.label)}</label>`).join("")}</div>` : ""}`;
     const drawAI = () => {
       const k = $("input[name=prov]:checked")?.value || "none", v = pv[k];
       d.ai.provider = k;
@@ -308,7 +312,7 @@ function drawWizard() {
         (k === "azure_openai" ? `<label>Endpoint <input id="wEp" value="${esc(d.ai.endpoint || "")}" placeholder="https://my-resource.openai.azure.com"></label><label>Deployment name <input id="wDep" value="${esc(d.ai.deployment || "")}" placeholder="gpt-4.1"></label><label>API key <input type="password" id="wKey"></label>` : "") +
         (k === "github_models" ? `<label>GitHub token (Models: read) <input type="password" id="wKey" placeholder="github_pat_…"></label>` : "") +
         (k === "ollama" ? `<label>Ollama address <input id="wEp" value="${esc(d.ai.endpoint || "http://localhost:11434")}"></label>` : "") +
-        (v.models ? `<label>Model <select id="wModel">${v.models.map((m) => `<option ${m === (d.ai.model || v.default_model) ? "selected" : ""}>${m}</option>`).join("")}</select></label>` : "");
+        (v.models ? `<label>Model <select id="wModel">${v.models.map((m) => `<option ${m === (d.ai.model || v.default_model) ? "selected" : ""}>${esc(m)}</option>`).join("")}</select></label>` : "");
     };
     $$("input[name=prov]").forEach((x) => x.onchange = drawAI); drawAI();
   }
@@ -402,8 +406,8 @@ loaders.position = async () => {
   drawOutlook(hist, n.net_worth, cf?.savings || 0);
   $("#itemsTbl").innerHTML = `<thead><tr><th>Name</th><th>Type</th><th class="n">Amount</th><th>Liquid</th><th>Updated</th></tr></thead><tbody>` +
     (items.map((i) => `<tr class="click" onclick="editItem(${i.id})"><td>${esc(i.name)}${i.note ? `<div class="hint" style="font-weight:400">${esc(i.note)}</div>` : ""}</td>
-      <td data-l="Type">${i.kind === "liability" ? "▼ " : ""}${esc(i.category)}</td><td class="n" data-l="Amount">${money(i.amount, i.currency)}<span class="cur" style="background:${ccyColor(i.currency)}22;color:${ccyColor(i.currency)}">${i.currency}</span></td>
-      <td data-l="Liquid">${i.liquid ? "✓" : "—"}</td><td class="muted" data-l="Updated">${i.updated || ""}</td></tr>`).join("") ||
+      <td data-l="Type">${i.kind === "liability" ? "▼ " : ""}${esc(i.category)}</td><td class="n" data-l="Amount">${money(i.amount, i.currency)}<span class="cur" style="background:${ccyColor(i.currency)}22;color:${ccyColor(i.currency)}">${esc(i.currency)}</span></td>
+      <td data-l="Liquid">${i.liquid ? "✓" : "—"}</td><td class="muted" data-l="Updated">${esc(i.updated || "")}</td></tr>`).join("") ||
       `<tr><td colspan="5"><div class="empty">Property, pensions, cars, loans… anything that isn't a bank account.<br><button class="sm" onclick="editItem()">＋ Add an asset or debt</button></div></td></tr>`) + "</tbody>";
 };
 function drawAttention(items) {
@@ -606,7 +610,7 @@ loaders.invest = async () => {
     const g = v - c;
     return `<tr class="click" onclick="editHolding(${x.id})"><td>${esc(x.name)}<div class="hint" style="font-weight:400">${esc(x.ticker || "no ticker")}${x.account ? " · " + esc(x.account) : ""}</div></td>
       <td data-l="Type">${esc(x.asset_type)}</td><td class="n" data-l="Units">${x.qty}</td>
-      <td class="n" data-l="Price">${money(px, x.currency)}<div class="hint">${x.price_date || "manual"}</div></td><td class="n" data-l="Value">${money(v, x.currency)}</td>
+      <td class="n" data-l="Price">${money(px, x.currency)}<div class="hint">${esc(x.price_date || "manual")}</div></td><td class="n" data-l="Value">${money(v, x.currency)}</td>
       <td class="n ${g >= 0 ? "pos" : "neg"}" data-l="Gain">${g >= 0 ? "+" : ""}${money(g, x.currency)}<div class="hint">${c ? pct(g / c) : ""}</div></td></tr>`;
   });
   $("#holdTbl").innerHTML = `<thead><tr><th>Holding</th><th>Type</th><th class="n">Units</th><th class="n">Price</th><th class="n">Value</th><th class="n">Gain</th></tr></thead><tbody>` +
@@ -682,7 +686,7 @@ loaders.learn = async () => {
     (pos.map(([t, x]) => `<tr><td>${esc(t)}</td><td class="n" data-l="Units">${x.qty}</td><td class="n" data-l="Avg cost">${x.avg_cost}</td><td class="n" data-l="Price">${x.price}</td><td class="n" data-l="Value">${eur(x.value, 2)}</td>
       <td class="n ${x.unrealized >= 0 ? "pos" : "neg"}" data-l="Unrealised">${eur(x.unrealized, 2)}</td></tr>`).join("") || `<tr><td colspan="6"><div class="empty">No positions. Try buying a few units of an ETF.</div></td></tr>`) + "</tbody>";
   $("#paperHist").innerHTML = `<thead><tr><th>When</th><th>Side</th><th>Ticker</th><th class="n">Units</th><th class="n">Price</th><th></th></tr></thead><tbody>` +
-    p.trades.slice().reverse().map((t) => `<tr><td>${t.ts.replace("T", " ")}</td><td data-l="Side">${t.side}</td><td data-l="Ticker">${esc(t.ticker)}</td><td class="n" data-l="Units">${t.qty}</td><td class="n" data-l="Price">${t.price}</td>
+    p.trades.slice().reverse().map((t) => `<tr><td>${esc(t.ts.replace("T", " "))}</td><td data-l="Side">${esc(t.side)}</td><td data-l="Ticker">${esc(t.ticker)}</td><td class="n" data-l="Units">${esc(t.qty)}</td><td class="n" data-l="Price">${esc(t.price)}</td>
       <td data-l=""><button class="link" onclick="delTrade(${t.id})">undo</button></td></tr>`).join("") + "</tbody>";
 };
 $("#paperForm").onsubmit = async (e) => {
@@ -706,11 +710,11 @@ loaders.tax = async () => {
   CAL = cal;
   $("#taxEyebrow").textContent = "Tax · " + (CFG.packs.map((p) => p.flag + " " + p.name).join(" · ") || "no countries switched on");
   drawCal();
-  $("#calcs").innerHTML = t.calculators.map((c, i) => `<div class="card calc"><h3>${c.flag} ${esc(c.title)} <span class="sub">${esc(c.country)} pack</span></h3>
+  $("#calcs").innerHTML = t.calculators.map((c, i) => `<div class="card calc"><h3>${esc(c.flag)} ${esc(c.title)} <span class="sub">${esc(c.country)} pack</span></h3>
     <form class="form" data-i="${i}">${c.inputs.map((f) => {
       const v = f.default ?? "";
       if (f.type === "bool") return `<label class="wide" style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" name="${f.id}" ${v ? "checked" : ""}> ${esc(f.label)}</label>`;
-      if (f.type === "select") return `<label>${esc(f.label)}<select name="${f.id}">${f.options.map((o) => `<option ${String(o) === String(v) ? "selected" : ""}>${o}</option>`).join("")}</select></label>`;
+      if (f.type === "select") return `<label>${esc(f.label)}<select name="${esc(f.id)}">${f.options.map((o) => `<option ${String(o) === String(v) ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></label>`;
       return `<label>${esc(f.label)}<input name="${f.id}" type="${f.type === "date" ? "date" : "number"}" step="any" value="${esc(v)}"></label>`;
     }).join("")}<button>Calculate</button></form>
     <div class="calcout"></div>${c.help ? `<details style="margin-top:8px"><summary class="hint">Tips</summary><p class="hint">${esc(c.help)}</p></details>` : ""}</div>`).join("")
@@ -735,7 +739,7 @@ function drawCal() {
   $("#taxKpis").innerHTML = `<div class="kpi gauge">${ring(health, health > .7 ? css("--good") : health > .35 ? css("--gold") : css("--lilac")).replace("funded", "done")}
       <div><div class="l">Compliance</div><div class="v">${done}/${CAL.length}</div><div class="s">${open.length} open</div></div></div>` +
     kpi(`<span class="dot" style="background:var(--bad)"></span>Due within 45 days`, `<span class="${soon ? "neg" : "pos"}">${soon}</span>`, soon ? "act on these first" : "nothing urgent") +
-    CFG.packs.slice(0, 2).map((p) => kpi(`${p.flag} ${esc(p.name)}`, open.filter((c) => c.country === p.code).length, "open items")).join("");
+    CFG.packs.slice(0, 2).map((p) => kpi(`${esc(p.flag)} ${esc(p.name)}`, open.filter((c) => c.country === p.code).length, "open items")).join("");
   $("#calendar").innerHTML = timeline(CAL.filter((c) => show || c.status !== "done"), { actions: true }) || `<div class="empty">No deadlines. Answer the yes/no questions in Settings, or add your own.</div>`;
   requestAnimationFrame(() => requestAnimationFrame(() => $$("#taxKpis .ring .fg").forEach((c) => c.style.strokeDashoffset = c.dataset.off)));
 }
@@ -821,8 +825,8 @@ loaders.settings = async () => {
   $("#setGeneral").innerHTML = `<label>First name <input name="name" value="${esc(c.profile.name || "")}"></label>
     <label>About you — one or two lines the assistant should know <textarea name="about" rows="2" placeholder="e.g. Employee in Germany, married, one child; buying a flat in India">${esc(c.profile.about || "")}</textarea></label>
     <label>Take-home pay per month in ${esc(c.base_currency)} (blank = average from Money) <input name="monthly_income" type="number" value="${esc(app.monthly_income || "")}"></label>
-    <div class="packpick">${c.all_packs.map((p) => `<label><input type="checkbox" name="country" value="${p.code}" ${c.countries.includes(p.code) ? "checked" : ""}><span class="fl">${p.flag}</span><b>${esc(p.name)}</b><small>${p.currency} · ${p.source}</small></label>`).join("")}</div>
-    ${qs.length ? `<div class="qlist">${qs.map((q) => `<label><input type="checkbox" data-q="${q.id}" ${c.profile.answers?.[q.id] ? "checked" : ""}><span class="fl">${q.flag}</span><span>${esc(q.label)}</span></label>`).join("")}</div>` : ""}
+    <div class="packpick">${c.all_packs.map((p) => `<label><input type="checkbox" name="country" value="${esc(p.code)}" ${c.countries.includes(p.code) ? "checked" : ""}><span class="fl">${esc(p.flag)}</span><b>${esc(p.name)}</b><small>${esc(p.currency)} · ${esc(p.source)}</small></label>`).join("")}</div>
+    ${qs.length ? `<div class="qlist">${qs.map((q) => `<label><input type="checkbox" data-q="${esc(q.id)}" ${c.profile.answers?.[q.id] ? "checked" : ""}><span class="fl">${esc(q.flag)}</span><span>${esc(q.label)}</span></label>`).join("")}</div>` : ""}
     <button>Save</button>`;
   $("#setGeneral").onsubmit = async (e) => {
     e.preventDefault(); const f = e.target, answers = {};
@@ -845,7 +849,7 @@ loaders.settings = async () => {
   };
   $("#fxRefresh").onclick = async () => { try { const r = await api("/fx/refresh", { method: "POST", body: {} }); $("#fxMsg").textContent = r.message; loaders.settings(); } catch (e) { $("#fxMsg").textContent = e.message; } };
   $("#setDocs").innerHTML = `<label>Documents folder <input name="root" value="${esc(c.documents_root)}"></label><p class="hint" style="margin:0">Now: <code>${esc(c.documents_root_resolved)}</code></p>
-    ${[...c.countries, "inbox"].map((k) => `<label>Folder for ${k === "inbox" ? "unrecognised files" : flagFor(k) + " " + esc(countryName(k))} <input name="f_${k}" value="${esc(c.folders?.[k] || "")}" placeholder="${esc(k === "inbox" ? "_Inbox" : (c.all_packs.find((p) => p.code === k)?.default_folder || k))}"></label>`).join("")}
+    ${[...c.countries, "inbox"].map((k) => `<label>Folder for ${k === "inbox" ? "unrecognised files" : flagFor(k) + " " + esc(countryName(k))} <input name="f_${esc(k)}" value="${esc(c.folders?.[k] || "")}" placeholder="${esc(k === "inbox" ? "_Inbox" : (c.all_packs.find((p) => p.code === k)?.default_folder || k))}"></label>`).join("")}
     <button>Save</button>`;
   $("#setDocs").onsubmit = async (e) => {
     e.preventDefault(); const f = e.target, folders = {};
@@ -859,9 +863,9 @@ loaders.settings = async () => {
       ${k !== "none" ? `<p class="hint" style="margin:0">${esc(v.help || "")}</p>` : `<p class="hint" style="margin:0">Everything works without AI. Connect one to chat about your finances.</p>`}
       ${k === "azure_openai" || k === "ollama" ? `<label>Endpoint <input name="endpoint" value="${esc(ai.endpoint || (k === "ollama" ? "http://localhost:11434" : ""))}"></label>` : ""}
       ${k === "azure_openai" ? `<div class="row2"><label>Deployment <input name="deployment" value="${esc(ai.deployment || "")}"></label><label>API version <input name="api_version" value="${esc(ai.api_version || "2024-10-21")}"></label></div>` : ""}
-      ${k !== "none" ? `<label>Model ${v.models ? `<select name="model">${v.models.map((m) => `<option ${m === (ai.model || v.default_model) ? "selected" : ""}>${m}</option>`).join("")}</select>` : `<input name="model" value="${esc(ai.model || "")}">`}</label>` : ""}
+      ${k !== "none" ? `<label>Model ${v.models ? `<select name="model">${v.models.map((m) => `<option ${m === (ai.model || v.default_model) ? "selected" : ""}>${esc(m)}</option>`).join("")}</select>` : `<input name="model" value="${esc(ai.model || "")}">`}</label>` : ""}
       ${secretKey ? `<label>${k === "github_models" ? "GitHub token" : "API key"} <input name="secret" type="password" placeholder="${c.secrets_set[secretKey] ? "saved — leave blank to keep" : "paste here"}"><span class="fieldhint">${c.secrets_storage === "keychain" ? "🔒 Stored in your system keychain (Windows Credential Manager / macOS Keychain), not in a file." : "Stored in secrets.json in your data folder (no system keychain found)."}</span></label>` : ""}
-      ${k === "anthropic" ? `<label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" name="web" ${ai.web_search !== false ? "checked" : ""}> Allow web search for current tax rules</label>` : ""}
+      ${k === "anthropic" ? `<label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" name="web" ${ai.web_search === true ? "checked" : ""}> Allow web search for current tax rules (off by default)</label>` : ""}
       <div style="display:flex;gap:8px"><button>Save</button>${k !== "none" ? `<button type="button" class="ghost" id="aiTest">Test connection</button>` : ""}</div>`;
     $("#setAI").provider.onchange = (e) => drawAI(e.target.value);
     $("#setAI").onsubmit = async (e) => {
@@ -895,7 +899,7 @@ loaders.settings = async () => {
       <a class="btn sm" href="${withToken("/data/export")}" download>Export everything (JSON)</a>
       <label class="btn sm ghost" style="cursor:pointer">Import from JSON…<input type="file" id="importFile" accept=".json,application/json" hidden></label>
       <button class="sm ghost" onclick="openWizard()">Use a different data folder</button></div>
-    ${userEnts.length ? `<p style="margin:12px 0 4px"><b>Your record types</b></p><div style="display:flex;gap:6px;flex-wrap:wrap">${userEnts.map(([k, e]) => `<button class="sm ghost" onclick="openRecords('${k}')">${esc(e.label)}</button>`).join("")}</div>` : ""}`;
+    ${userEnts.length ? `<p style="margin:12px 0 4px"><b>Your record types</b></p><div style="display:flex;gap:6px;flex-wrap:wrap">${userEnts.map(([k, e]) => `<button class="sm ghost" onclick="openRecords(${jsArg(k)})">${esc(e.label)}</button>`).join("")}</div>` : ""}`;
   $("#updChk").onchange = async (e) => { await api("/config", { method: "POST", body: { updates: { check: e.target.checked } } }); toast(e.target.checked ? "Update checks on" : "Update checks off"); };
   $("#updNow").onclick = async () => { $("#updMsg").textContent = "Checking…"; const u = await checkUpdate(true);
     $("#updMsg").textContent = !u ? "Couldn't check right now" : !u.enabled ? "Update checks are off" : u.error && !u.latest?.version ? "Couldn't reach the website" : u.newer ? `Version ${u.latest.version} is available` : "You have the latest version"; };
@@ -976,7 +980,7 @@ function drawEmpty() {
   $("#msgs").innerHTML = `<div class="hello"><div class="mark">✦</div><h2>${greeting()}${META.name ? ", " + esc(META.name) : ""}</h2>
     <p class="muted">Ask about your money, goals, or German and Indian taxes. Answers use your own numbers, in plain English.</p>
     <p class="hint">Connected: ${esc(META.provider_label)} · ${esc(META.model)}</p>
-    <div class="sugg">${META.suggestions.map(([i, q, s]) => `<button onclick="askSuggest(this)" data-q="${esc(q)}"><span class="si">${i}</span><span>${esc(q)}<small>${esc(s)}</small></span></button>`).join("")}</div></div>`;
+    <div class="sugg">${META.suggestions.map(([i, q, s]) => `<button onclick="askSuggest(this)" data-q="${esc(q)}"><span class="si">${esc(i)}</span><span>${esc(q)}<small>${esc(s)}</small></span></button>`).join("")}</div></div>`;
 }
 window.askSuggest = (b) => { $("#prompt").value = b.dataset.q; send(); };
 window.newChat = () => { CHAT_ID = null; drawEmpty(); drawChatList(); $("#chatSide").classList.remove("open"); $("#prompt").focus(); };
@@ -984,12 +988,27 @@ window.delChat = async (id) => { await api("/chat/" + id, { method: "DELETE" });
 window.openChat = async (id) => {
   CHAT_ID = id; $("#chatSide").classList.remove("open");
   const c = await api("/chat/" + id);
-  $("#msgs").innerHTML = c.messages.map((m) => m.role === "user" ? userMsg(m.text) : aiMsg(m.text, m.tools)).join("");
+  $("#msgs").innerHTML = c.messages.map((m) => m.role === "user" ? userMsg(m.text) : aiMsg(m.text, m.tools, m.proposals)).join("");
   scrollDown(true); drawChatList();
 };
 const userMsg = (t) => `<div class="msg user"><div class="bub">${esc(t)}</div></div>`;
-const aiMsg = (t, tools = []) => `<div class="msg ai"><div class="ai-ico">✦</div><div class="ai-body">
-  ${tools.length ? `<div class="chips">${[...new Set(tools)].map((x) => `<span class="chip done">${esc(x)}</span>`).join("")}</div>` : ""}${md(t)}</div></div>`;
+const aiMsg = (t, tools = [], props = []) => `<div class="msg ai"><div class="ai-ico">✦</div><div class="ai-body">
+  ${tools.length ? `<div class="chips">${[...new Set(tools)].map((x) => `<span class="chip done">${esc(x)}</span>`).join("")}</div>` : ""}${md(t)}${props.map(aiProp).join("")}</div></div>`;
+// A change the assistant suggested: nothing is saved until the person approves it here or on Routines.
+const PROP_STATUS = { approved: "Approved", skipped: "Skipped", gone: "No longer available" };
+const aiProp = (p) => `<div class="aiprop" data-pid="${Number(p.id)}"><div class="aiprop-t"><span class="lbl">Suggested change</span>${esc(hideAmt(p.title || ""))}</div>
+  <div class="aiprop-a">${!p.status || p.status === "pending"
+    ? `<button class="sm" onclick="decideChat(this,${Number(p.id)},'approve')">Approve</button><button class="sm ghost" onclick="decideChat(this,${Number(p.id)},'skip')">Skip</button>`
+    : `<span class="chip ${p.status === "approved" ? "good" : "muted"}">${PROP_STATUS[p.status] || esc(p.status)}</span>`}</div></div>`;
+window.decideChat = async (btn, id, decision) => {
+  const box = btn.closest(".aiprop-a"); $$("button", box).forEach((b) => b.disabled = true);
+  try {
+    const r = await api(`/proposals/${id}`, { method: "POST", body: { decision } });
+    box.innerHTML = `<span class="chip ${decision === "approve" ? "good" : "muted"}">${decision === "approve" ? "Approved" : "Skipped"}</span>`;
+    toast(decision === "approve" ? "Saved: " + (r.result || "approved") : "Skipped");
+  } catch (e) { toast(e.message); $$("button", box).forEach((b) => b.disabled = false); }
+  window.refreshNavCount?.();
+};
 function scrollDown(force) { const m = $("#msgs"); if (force || m.scrollHeight - m.scrollTop - m.clientHeight < 160) m.scrollTop = m.scrollHeight; }
 async function send() {
   const ta = $("#prompt"), text = ta.value.trim();
@@ -1002,7 +1021,8 @@ async function send() {
   scrollDown(true);
   STREAMING = true; $("#sendBtn").disabled = true; $("#chatStatus").textContent = "Thinking…";
   const live = $("#live"), chipsEl = $(".chips", live), txtEl = $(".txt", live);
-  let buf = "", changed = false, pending = false;
+  let buf = "", proposed = 0, pending = false;
+  const propsEl = document.createElement("div"); live.querySelector(".ai-body").append(propsEl);
   const render = () => { if (pending) return; pending = true; requestAnimationFrame(() => { txtEl.innerHTML = md(buf); pending = false; scrollDown(); }); };
   try {
     const r = await fetch("/chat/send", { method: "POST", headers: HDRS(), body: JSON.stringify({ chat_id: CHAT_ID, text }) });
@@ -1018,8 +1038,11 @@ async function send() {
         const ev = (block.match(/^event: (.*)$/m) || [])[1], data = JSON.parse((block.match(/^data: (.*)$/m) || [, "{}"])[1]);
         if (ev === "chat") { CHAT_ID = data.id; drawChatList(); }
         else if (ev === "text") { buf += data.t; $("#chatStatus").textContent = "Writing…"; render(); }
-        else if (ev === "tool") { chipsEl.insertAdjacentHTML("beforeend", `<span class="chip run" data-n="${data.name}">${esc(data.label)}</span>`); $("#chatStatus").textContent = data.label + "…"; scrollDown(); }
-        else if (ev === "tool_done") { const c = chipsEl.querySelector(`.chip.run[data-n="${data.name}"]`); if (c) c.className = "chip done"; if (data.changed) changed = true; }
+        else if (ev === "tool") { chipsEl.insertAdjacentHTML("beforeend", `<span class="chip run" data-n="${esc(data.name)}">${esc(data.label)}</span>`); $("#chatStatus").textContent = data.label + "…"; scrollDown(); }
+        else if (ev === "tool_done") {
+          const c = chipsEl.querySelector(`.chip.run[data-n="${CSS.escape(String(data.name))}"]`); if (c) c.className = "chip done";
+          if (data.proposal) { proposed++; propsEl.insertAdjacentHTML("beforeend", aiProp(data.proposal)); scrollDown(); }
+        }
         else if (ev === "error") { txtEl.insertAdjacentHTML("beforeend", `<p class="err-inline">⚠ ${esc(data.message)}</p>`); }
         else if (ev === "done") { $$(".chip.run", chipsEl).forEach((c) => c.className = "chip done"); }
       }
@@ -1029,7 +1052,7 @@ async function send() {
   } finally {
     txtEl.classList.remove("cursor"); if (buf) txtEl.innerHTML = md(buf);
     live.removeAttribute("id"); STREAMING = false; $("#sendBtn").disabled = false; $("#chatStatus").textContent = "";
-    if (changed) toast("Claude updated your data");
+    if (proposed) { toast(proposed === 1 ? "A suggested change is waiting for your approval" : `${proposed} suggested changes are waiting for your approval`); window.refreshNavCount?.(); }
     drawChatList(); scrollDown();
   }
 }
@@ -1067,7 +1090,7 @@ loaders.money = async () => {
   const q = new URLSearchParams({ period: MONEY.period, anchor: MONEY.anchor, display: MONEY.ccy }); if (MONEY.account) q.set("account", MONEY.account);
   if (!CFG.currencies.includes(MONEY.ccy)) { MONEY.ccy = BASE(); q.set("display", MONEY.ccy); }
   const [acc, sum] = await Promise.all([api("/money/accounts"), api("/money/summary?" + q)]);
-  $("#ccySeg").innerHTML = CFG.currencies.map((c) => `<button data-c="${c}">${SYM[c] ? SYM[c].trim() + " " : ""}${c}</button>`).join("");
+  $("#ccySeg").innerHTML = CFG.currencies.map((c) => `<button data-c="${esc(c)}">${SYM[c] ? SYM[c].trim() + " " : ""}${esc(c)}</button>`).join("");
   $$("#ccySeg button").forEach((b) => b.onclick = () => { MONEY.ccy = b.dataset.c; try { localStorage.setItem("fm-ccy", MONEY.ccy); } catch (e) { } loaders.money(); });
   MONEY.accts = acc.accounts;
   $$("#ccySeg button").forEach((b) => b.classList.toggle("on", b.dataset.c === MONEY.ccy));
@@ -1081,7 +1104,7 @@ loaders.money = async () => {
         <div class="ty">${esc(a.type)}${a.institution ? " · " + esc(a.institution) : ""}</div><div class="nm">${esc(a.name)}</div>
         <div class="bal ${a.balance < 0 ? "neg" : ""}">${fmtC(a.balance, a.currency)}</div>
         <div class="io">+${fmtC(a.income, a.currency)} · −${fmtC(a.expense, a.currency)}</div></div>`).join("")}
-      ${code !== "_" ? `<div class="acct add" onclick="editAccount(null,'${code}')" tabindex="0">＋ Add ${esc(label)} account</div>` : ""}</div></div>`;
+      ${code !== "_" ? `<div class="acct add" onclick="editAccount(null,${jsArg(code)})" tabindex="0">＋ Add ${esc(label)} account</div>` : ""}</div></div>`;
   };
   const known = CFG.packs.map((p) => p.code), hasOther = acc.accounts.some((a) => !known.includes(a.country));
   $("#acctGroups").innerHTML = CFG.packs.map((p) => grp(p.code, p.name, p.flag, acc.accounts.filter((a) => a.country === p.code))).join("")
@@ -1163,7 +1186,7 @@ function setKind(k, silent) {
   $("#acctLbl").textContent = k === "income" ? "Into account" : "From account";
   const cats = k === "income" ? MONEY.meta.income_categories : MONEY.meta.expense_categories;
   const keep = f.category.value;
-  f.category.innerHTML = cats.map((x) => `<option>${x}</option>`).join("");
+  f.category.innerHTML = cats.map((x) => `<option>${esc(x)}</option>`).join("");
   if (cats.includes(keep)) f.category.value = keep;
   $("#txSubmit").textContent = { expense: "Add expense", income: "Add income", transfer: "Add transfer" }[k] + (f.frequency.value ? " (repeating)" : "");
   syncCcy();
@@ -1262,7 +1285,7 @@ function drawQueueCard(id, a) {
     ${a.duplicate_of ? `<div class="warnline dup">This exact file is already filed at <b>${esc(a.duplicate_of)}</b>.</div>` : ""}
     ${!a.has_text ? `<div class="warnline">No readable text (scan or photo) — I went by the file name${a.confidence ? "" : " and couldn't tell"}. Check the category and folder.</div>` : ""}
     <div class="qform">
-      <label>Category <select data-f="category">${DOCS.meta.categories.map((x) => `<option ${x === a.category ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+      <label>Category <select data-f="category">${DOCS.meta.categories.map((x) => `<option ${x === a.category ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></label>
       <label>Folder <input data-f="folder" list="fl-${id}" value="${esc(a.folder)}"><datalist id="fl-${id}">${folders.map((x) => `<option value="${esc(x)}">`).join("")}</datalist></label>
       <label>File name <input data-f="filename" value="${esc(a.filename)}"></label></div>
     ${a.excerpt ? `<details><summary class="hint">What I read</summary><div class="excerpt">${esc(a.excerpt)}</div></details>` : ""}
@@ -1326,14 +1349,14 @@ async function checkUpdate(force) {
   const el = $("#updateNote");
   if (u.newer && (force || dismissed !== u.latest.version)) {
     el.innerHTML = `<span><b>Version ${esc(u.latest.version)} is available</b> — you have ${esc(u.current)}.</span>
-      ${u.latest.notes_url ? `<a href="${esc(u.latest.notes_url)}" target="_blank" rel="noopener">What's new</a>` : ""}
+      ${safeUrl(u.latest.notes_url) ? `<a href="${safeUrl(u.latest.notes_url)}" target="_blank" rel="noopener">What's new</a>` : ""}
       <button class="sm" type="button" id="updHow">How to update</button><button class="sm ghost" type="button" id="updLater">Later</button>`;
     el.hidden = false;
     $("#updLater").onclick = () => { try { localStorage.setItem("afUpdateDismissed", u.latest.version); } catch (e) { } el.hidden = true; };
     $("#updHow").onclick = () => {
       el.innerHTML = `<span><b>Update to ${esc(u.latest.version)}</b> — your data is backed up automatically when the new version first starts.</span>
         <span>Installed with pipx: <code>${esc(u.latest.install || "pipx upgrade aaryaai-finance")}</code></span>
-        ${u.latest.download_url ? `<span>Using start.bat: <a href="${esc(u.latest.download_url)}" target="_blank" rel="noopener">download the new version</a> and unzip it over the old folder.</span>` : ""}
+        ${safeUrl(u.latest.download_url) ? `<span>Using start.bat: <a href="${safeUrl(u.latest.download_url)}" target="_blank" rel="noopener">download the new version</a> and unzip it over the old folder.</span>` : ""}
         <button class="sm ghost" type="button" id="updClose">Close</button>`;
       $("#updClose").onclick = () => { el.hidden = true; };
     };

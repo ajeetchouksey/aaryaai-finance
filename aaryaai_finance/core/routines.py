@@ -173,7 +173,7 @@ def monthly_review(ctx) -> dict:
             + (f" {proposed} goal change(s) proposed." if proposed else ""))
     out = {"text": text, "month": f"{last:%Y-%m}", "income": s["income"], "expense": s["expense"], "savings_rate": rate,
            "changes": changes[:3], "proposed": proposed}
-    ai_on = ctx.db.settings().get("routines:ai_summary", "1") != "0"
+    ai_on = ctx.db.settings().get("routines:ai_summary", "0") == "1"   # opt-in (PRIVACY.md)
     if ai_on:
         try:
             from ..ai.providers import make_provider

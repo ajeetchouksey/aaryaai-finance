@@ -313,7 +313,7 @@ def forecast(accounts_with_balance: list[dict], recurring: list[dict], planned: 
             recv = conv(send / 1.01, d_c, c)
             step["partial"] = True
         step.update(from_ccy=d_c, send=round(send, 2), receive=round(recv, 2), date=tdate.isoformat(),
-                    rate_note=f"at today's rate plus 1% for fees and rate moves")
+                    rate_note="at today's rate plus 1% for fees and rate moves")
         plan.append(step)
         work.append(Flow(date=tdate, ccy=d_c, amount=-send, account="", label=f"Planned transfer to {c}", confidence="plan",
                          source="plan", why="funding plan", category="Transfer"))

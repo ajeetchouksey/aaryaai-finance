@@ -54,7 +54,6 @@ def fake_llm():
 def test_tool_loop_over_openai_wire(fake_llm, tmp_path, monkeypatch):
     url, seen = fake_llm
     monkeypatch.setenv("APPDATA", str(tmp_path / "ad")); monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "ad"))
-    from fastapi.testclient import TestClient
     from aaryaai_finance.server import create_app
     from conftest import local_client
     c = local_client(create_app(tmp_path / "boot"))

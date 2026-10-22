@@ -308,6 +308,36 @@ def test_hide_amounts(page):
     page.wait_for_function("!document.querySelector('#homeKpis .kpi').innerText.includes('•')")
 
 
+# ---------------------------------------------------------------- text from rules, packs and documents is shown, never run
+HOSTILE = ["it's", 'a "quote"', "&quot;);window.__xss=1;//", "'><img src=x onerror=window.__xss=1>", "</script><b>x</b>", "\\", "${x}"]
+
+
+def test_attribute_helpers_keep_hostile_text_inert(page):
+    for s in HOSTILE:
+        got = page.evaluate("""(s) => { const d = document.createElement('div');
+            d.innerHTML = `<button title="${esc(s)}" onclick="window.__v=${jsArg(s)}"></button>`;
+            d.firstChild.click(); return [window.__v, d.firstChild.title]; }""", s)
+        assert got == [s, s]
+    assert page.evaluate("safeUrl('javascript:alert(1)')") == "" and page.evaluate("safeUrl('https://example.org/a')") == "https://example.org/a"
+    assert page.evaluate("window.__xss") is None
+
+
+def test_deadline_with_hostile_title_renders_as_text(page):
+    title = "Pay \"'><img src=x onerror=window.__xss=1> &quot;);window.__xss=2;// tax"
+    page.evaluate("(t) => api('/api/calendar', {method: 'POST', body: {due: '2099-01-15', country: 'DE', title: t, severity: 'normal'}})", title)
+    go(page, "tax", ".tl-item")
+    item = page.locator(".tl-item", has_text="window.__xss=2").first
+    assert title in item.inner_text()
+    item.locator("button:has-text('Ask')").click()               # the title travels inside the button's onclick
+    page.wait_for_selector("section#chat.on")
+    assert page.evaluate("window.__xss") is None
+    go(page, "tax", ".tl-item")
+    item = page.locator(".tl-item", has_text="window.__xss=2").first
+    item.locator("button:has-text('Mark done')").click()
+    page.wait_for_function("CAL.some((c) => c.title.includes('window.__xss=2') && c.status === 'done')")
+    assert page.evaluate("window.__xss") is None
+
+
 def test_api_refuses_requests_without_the_page_token(page, app):
     # (browser contexts here bypass the page's Content-Security-Policy so the test can poll the page; the policy itself is checked here)
     r = page.request.get(app["url"] + "/")
@@ -316,6 +346,39 @@ def test_api_refuses_requests_without_the_page_token(page, app):
     assert r.status == 401 and "Session expired" in r.text()
     r = page.request.get(app["url"] + "/home", headers={"Origin": "https://evil.example"})
     assert r.status == 403
+
+
+# ---------------------------------------------------------------- Ask AI: suggestions wait for approval
+def test_chat_suggestion_waits_for_approval(page, monkeypatch):
+    from aaryaai_finance import server as srv
+    from aaryaai_finance.ai.providers import Event, Final
+    acc = page.evaluate("api('/api/accounts')")[0]["id"]
+
+    class Scripted:
+        def __init__(self):
+            self.turn = 0
+
+        def stream(self, system, history, tools):
+            self.turn += 1
+            if self.turn == 1:
+                yield Event("tool_start", name="add_transaction")
+                yield Final([{"type": "tool_use", "id": "t1", "name": "add_transaction",
+                              "input": {"kind": "expense", "account_id": acc, "amount": 12.34, "category": "Groceries"}}], "tool_use")
+            else:
+                yield Event("text", text="I proposed it.")
+                yield Final([{"type": "text", "text": "I proposed it."}], "end_turn")
+
+    monkeypatch.setattr(srv, "make_provider", lambda cfg, secret: Scripted())
+    before = len(page.evaluate("api('/api/transactions')"))
+    go(page, "chat")
+    page.fill("#prompt", "log 12.34 for groceries")
+    page.press("#prompt", "Enter")
+    card = page.locator(".aiprop").last
+    card.wait_for()
+    assert "12.34" in card.inner_text() and len(page.evaluate("api('/api/transactions')")) == before
+    card.locator("button:has-text('Approve')").click()
+    card.locator(".chip:has-text('Approved')").wait_for()
+    assert len(page.evaluate("api('/api/transactions')")) == before + 1
 
 
 # ---------------------------------------------------------------- first-time setup

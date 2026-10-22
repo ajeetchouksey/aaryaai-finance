@@ -577,7 +577,7 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         return {"routines": rt.status(c), "proposals": c.db.list("proposals", "created DESC")[:40], "audit": audit,
                 "ai": {"provider": prov_cfg.get("provider"), "ready": make_provider(prov_cfg, c.settings.secret) is not None,
                        "label": PROVIDERS.get(prov_cfg.get("provider"), {}).get("label"), "model": prov_cfg.get("model", "")},
-                "ai_summary": c.db.settings().get("routines:ai_summary", "1") != "0",
+                "ai_summary": c.db.settings().get("routines:ai_summary", "0") == "1",
                 "mcp": {"config": config_snippet(c.settings.data_dir), "last": mcp_last, "clients": __import__("aaryaai_finance.mcp_setup", fromlist=["status"]).status(c.settings.data_dir)}}
 
     @app.post("/routines/run")
@@ -993,7 +993,12 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
 
     @app.get("/chat/{chat_id}")
     def chat_get(chat_id: int):
-        return {"id": chat_id, "messages": assistant.display_messages(ctx().db.chat_history(chat_id))}
+        msgs = assistant.display_messages(ctx().db.chat_history(chat_id))
+        status = {p["id"]: p["status"] for p in ctx().db.list("proposals")}
+        for m in msgs:
+            for pr in m.get("proposals", []):
+                pr["status"] = status.get(pr["id"], "gone")
+        return {"id": chat_id, "messages": msgs}
 
     @app.delete("/chat/{chat_id}")
     def chat_del(chat_id: int):
