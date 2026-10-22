@@ -44,8 +44,10 @@ def _check_documents_root(settings: Settings, value) -> None:
     """The documents folder must be a folder of its own: the app scans, opens and moves files inside it."""
     # Plain string normalisation (no filesystem access): this only decides whether the setting is acceptable.
     norm = lambda p: Path(os.path.normcase(os.path.normpath(os.path.abspath(p))))      # noqa: E731
-    raw = Path(os.path.expandvars(str(value or "documents"))).expanduser()
-    r = norm(raw if raw.is_absolute() else settings.data_dir / raw)
+    s = os.path.expandvars(str(value or "documents"))
+    if s == "~" or s.startswith(("~/", "~\\")):
+        s = str(Path.home()) + s[1:]
+    r = norm(s if os.path.isabs(s) else os.path.join(settings.data_dir, s))
     home = norm(Path.home())
     system = {norm(x) for x in ("/etc", "/usr", "/bin", "/sbin", "/System", "/Library", "/Applications",
                                 os.environ.get("SystemRoot", r"C:\Windows"), os.environ.get("ProgramFiles", r"C:\Program Files"))}
