@@ -355,6 +355,12 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
             _check_paper_trade(c, row)
         if table in ("transactions", "recurring"):
             _check_money_row(c, table, row)
+        if table == "loans":                              # a loan must have a schedule that can be worked out
+            from .core.loans import schedule
+            try:
+                schedule({**(c.db.get("loans", row["id"]) or {} if row.get("id") else {}), **row})
+            except (ValueError, TypeError) as e:
+                raise HTTPException(400, str(e))
         if table == "transactions" and row.get("id"):
             old = c.db.get("transactions", row["id"])
             if old and old.get("recurring_id") and row.get("date") and row["date"] != old["date"]:
@@ -450,6 +456,10 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         cf["spend_source"] = "your budget in Plan" if budget else (f"{acts.get('basis', 'recent months')} in Money" if acts["expense"] else "not set")
         cf["wants"] = list(dict.fromkeys(ledger.DEFAULT_WANTS + [w for p in c.packs.values() for w in (p.get("categories") or {}).get("wants", [])]))
         return cf
+
+    @app.get("/loans")
+    def loans():
+        return ctx().loans()
 
     @app.get("/budget/status")
     def budget_status():
