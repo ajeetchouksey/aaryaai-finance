@@ -67,8 +67,8 @@ const daysTo = (d) => Math.ceil((new Date(d) - new Date(new Date().toDateString(
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 // colour per currency: base = sky, second = lilac, others from palette
-const CCY_COL = ["#38bdf8", "#a99bff", "#34d399", "#fbbf24", "#f472b6"];
-const ccyColor = (c) => CCY_COL[Math.max(0, CFG.currencies.indexOf(c)) % CCY_COL.length];
+// currency colours are theme tokens (--ccy1…5 in style.css): read on each draw so they follow light and dark
+const ccyColor = (c) => css(`--ccy${Math.max(0, CFG.currencies.indexOf(c)) % 5 + 1}`);
 
 let MODEL = { entities: {} };
 async function loadConfig() {
@@ -81,13 +81,23 @@ async function loadConfig() {
 }
 async function loadFx() { try { await loadConfig(); } catch (e) { } }
 // ---------------- theme & charts ----------------
-window.toggleTheme = () => {
-  const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-  const next = cur === "dark" ? "light" : "dark";
-  document.documentElement.dataset.theme = next;
-  try { localStorage.setItem("fm-theme", next); } catch (e) { }
-  const active = $(".tab.on")?.id; if (active) loaders[active]?.();
-};
+// "system" follows the computer; the choice is kept in this browser only (index.html applies it before the first paint)
+const themeMode = () => { try { return localStorage.getItem("fm-theme") || "system"; } catch (e) { return "system"; } };
+function markTheme() {
+  const m = themeMode();
+  document.documentElement.dataset.theme = m === "light" || (m === "system" && matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+  $('meta[name="theme-color"]')?.setAttribute("content", css("--paper"));
+  document.querySelectorAll("#themeSeg [data-theme-mode]").forEach((b) => {
+    b.classList.toggle("on", b.dataset.themeMode === m); b.setAttribute("aria-pressed", String(b.dataset.themeMode === m)); });
+}
+function applyTheme() {
+  markTheme();
+  const active = $(".tab.on")?.id; if (active) loaders[active]?.();      // charts read the colours when they draw
+}
+markTheme();
+window.setTheme = (m) => { try { localStorage.setItem("fm-theme", m); } catch (e) { } applyTheme(); };
+document.querySelectorAll("#themeSeg [data-theme-mode]").forEach((b) => b.addEventListener("click", () => setTheme(b.dataset.themeMode)));
+matchMedia("(prefers-color-scheme: light)").addEventListener?.("change", () => { if (themeMode() === "system") applyTheme(); });
 // category colours stay neutral so blue/red always mean EUR/INR
 const palette = () => ["#5b4bd6", "#fbbf24", "#34d399", "#f472b6", "#fb923c", "#2dd4bf", "#c4b5fd", "#64748b"];
 const charts = {};
@@ -95,7 +105,8 @@ function chart(id, cfg, a11y = {}) {
   if (!window.Chart) return;
   Chart.defaults.font.family = css("--body"); Chart.defaults.color = css("--muted");
   Chart.defaults.borderColor = css("--line");
-  Chart.defaults.plugins.tooltip.backgroundColor = "#16223a"; Chart.defaults.plugins.tooltip.borderColor = "rgba(169,155,255,.3)"; Chart.defaults.plugins.tooltip.borderWidth = 1;
+  const tip = Chart.defaults.plugins.tooltip;
+  tip.backgroundColor = css("--solid"); tip.borderColor = "rgba(169,155,255,.3)"; tip.borderWidth = 1; tip.titleColor = tip.bodyColor = css("--ink");
   charts[id]?.destroy();
   cfg.options = { responsive: true, maintainAspectRatio: false, animation: { duration: 700 }, ...(cfg.options || {}) };
   charts[id] = new Chart($("#" + id), cfg);

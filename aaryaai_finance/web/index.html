@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0e1a2d">
+<script>/* theme before the first paint, so a light screen never flashes dark */
+try { const m = localStorage.getItem("fm-theme") || "system";
+  document.documentElement.dataset.theme = m === "light" || (m === "system" && matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+} catch (e) { document.documentElement.dataset.theme = "dark"; }</script>
 <link rel="icon" type="image/svg+xml" href="/static/brand/favicon.svg">
 <title>aaryaai finance</title>
 <link rel="stylesheet" href="/static/style.css">
@@ -400,6 +404,10 @@
   <div class="grid g2">
     <div class="card"><h3>Your data</h3><div id="setData"></div></div>
     <div class="card"><h3>Custom fields &amp; record types <span class="hint" style="font-size:13px">model.json</span></h3><div id="setModel"></div></div>
+    <div class="card" style="align-self:start"><h3>Appearance</h3>
+      <div class="seg" id="themeSeg" role="group" aria-label="Colour theme">
+        <button type="button" aria-pressed="false" data-theme-mode="system">System</button><button type="button" aria-pressed="false" data-theme-mode="dark">Dark</button><button type="button" aria-pressed="false" data-theme-mode="light">Light</button></div>
+      <p class="hint">System follows your computer's light or dark setting. Saved in this browser only.</p></div>
     <div class="card span2" id="recordsCard" hidden><h3 id="recTitle">Records</h3><div id="setRecords"></div></div>
     <div class="card"><h3>Glossary</h3><dl class="gloss" id="gloss"></dl></div>
   </div>
