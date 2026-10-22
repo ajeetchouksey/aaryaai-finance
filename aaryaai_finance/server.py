@@ -702,6 +702,9 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
                 if x not in exp: exp.insert(-1, x)
             for x in p.get("account_types", []):
                 if x not in types: types.insert(-1, x)
+        for r in c.rules.category_rules:                    # a category your rules use is always one you can pick
+            lst = inc if r.get("kind") == "income" else exp
+            if r["category"] not in lst: lst.insert(-1, r["category"])
         return {"income_categories": inc, "expense_categories": exp, "account_types": types, "frequencies": ledger.FREQUENCIES,
                 "base": c.base, "currencies": c.settings.currencies, "rates": c.rates,
                 "countries": [pack_summary(p) for p in c.packs.values()]}
@@ -818,8 +821,18 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
         need(res.get("profile"), res.get("error") or "Couldn't read this file.")
         existing = [t for t in c.db.list("transactions") if t["account_id"] == acc["id"] and t["kind"] != "transfer"]
         importer.mark_duplicates(res["rows"], existing)
+        from .core.categorize import categorize
+        for r in res["rows"]:
+            r["category"], r["category_rule"] = categorize(r["description"], r["kind"], c.rules.category_rules)
         return {**res, "account": {"id": acc["id"], "name": acc["name"], "currency": acc["currency"]},
                 "new": sum(1 for r in res["rows"] if not r["duplicate"])}
+
+    @app.post("/categorize")
+    def categorize_text(p: dict = Body(...)):
+        """The category your rules give a note or payee (used to fill in the category while you type)."""
+        from .core.categorize import categorize
+        cat, rule = categorize(str(p.get("text") or "")[:300], p.get("kind"), ctx().rules.category_rules)
+        return {"category": cat, "rule": rule}
 
     @app.post("/import/apply")
     def import_apply(p: dict = Body(...)):

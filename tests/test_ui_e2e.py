@@ -420,6 +420,25 @@ def test_import_a_statement_with_preview(page, tmp_path):
     assert len(after) == before + 1 and any((t["note"] or "").startswith("UI test bakery") for t in after)
 
 
+def test_category_rules_suggest_while_typing_and_in_the_import_preview(page, tmp_path):
+    go(page, "money", "#txForm")
+    page.click("#kindSeg button[data-k=expense]")
+    page.fill("#txForm input[name=note]", "REWE Markt")
+    page.wait_for_function("document.querySelector('#txForm select[name=category]').value === 'Groceries'")
+    page.select_option("#txForm select[name=category]", "Eating out")                 # your own pick wins from now on
+    page.fill("#txForm input[name=note]", "Stadtwerke")
+    page.wait_for_timeout(700)
+    assert page.eval_on_selector("#txForm select[name=category]", "e => e.value") == "Eating out"
+    csv = tmp_path / "cats.csv"
+    csv.write_text("Buchungstag;Verwendungszweck;Beguenstigter/Zahlungspflichtiger;Betrag\n04.10.2026;Abschlag;Stadtwerke UI test;-80,00\n", encoding="utf-8")
+    page.wait_for_function("document.querySelectorAll('#impForm select option').length > 0")
+    page.set_input_files("#impFile", str(csv))
+    sel = page.locator("#impDlg select[data-cat]").first
+    sel.wait_for()
+    assert sel.input_value() == "Utilities & internet" and "de_utilities" in sel.get_attribute("title")
+    page.click("#impCancel")
+
+
 # ---------------------------------------------------------------- first-time setup
 def test_setup_wizard_on_an_empty_folder(browser, tmp_path):
     fresh = tmp_path / "fresh"

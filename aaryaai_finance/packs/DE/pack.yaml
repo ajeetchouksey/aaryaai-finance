@@ -311,3 +311,13 @@ import_profiles:
     match: {headers_all: [Buchungsdatum, Verwendungszweck, "Betrag (€)"]}
     columns: {date: Buchungsdatum, amount: "Betrag (€)", description: [Zahlungsempfänger*in, Verwendungszweck]}
     date_format: ["%d.%m.%y", "%d.%m.%Y"]
+
+# Category rules: a payee or description sets the category (Money and statement import). Yours come first; the first match wins.
+category_rules:
+  - {id: de_rent, category: "Rent / Warmmiete", kind: expense, match: {text_any: [miete, hausverwaltung, warmmiete]}}
+  - {id: de_groceries, category: Groceries, kind: expense, match: {text_any: [rewe, edeka, aldi, lidl, kaufland, penny, netto marken, denns, alnatura]}}
+  - {id: de_transport, category: Transport, kind: expense, match: {text_any: [deutschlandticket, db vertrieb, deutsche bahn, bvg, mvg, hvv, rmv, flixbus]}}
+  - {id: de_utilities, category: "Utilities & internet", kind: expense, match: {text_any: [stadtwerke, vodafone, telekom, 1und1, strom, rundfunk]}}
+  - {id: de_insurance, category: Insurance, kind: expense, match: {text_any: [versicherung, krankenkasse, haftpflicht]}}
+  - {id: de_salary, category: Salary, kind: income, match: {text_any: [gehalt, lohn, bezuege]}}
+  - {id: de_tax_refund, category: Tax refund, kind: income, match: {text_any: [finanzamt, steuererstattung]}}

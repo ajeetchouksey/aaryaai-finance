@@ -70,6 +70,22 @@ import_profiles:
 
 Amounts are read the German (`1.234,56`), English (`1,234.56`) and Indian (`1,20,000`) way; `12,50-` and `(12.50)` count as negative. You see every row before anything is saved, rows already in the account (same date, type and amount) start unticked, and the import is all-or-nothing.
 
+## Category rules
+
+A payee or note sets the category, the same way every time: while you type a note in **Money → Add an entry** (until you pick a category yourself) and for every row of a statement import. Your rules files come first, then the country packs; the first rule that matches wins, and a rule with a pack rule's `id` replaces it.
+
+```yaml
+category_rules:
+  - id: pets
+    category: Pets                      # a new category appears in the pickers automatically
+    kind: expense                       # optional: only for expenses (or income)
+    match:
+      text_any: [fressnapf, zooplus]    # any of these words (ignoring case, spaces and punctuation)
+      text_all: []                      # optional: all of these words
+```
+
+Words need at least three letters, so a rule can't match almost everything by accident. In the import preview, hovering over a row's category shows which rule chose it.
+
 ## Deadline rules
 
 ```yaml
