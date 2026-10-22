@@ -141,6 +141,7 @@ With an AI provider connected, **Ask me one more question** gets one tailored fo
 | Deadline sweep | weekly | deadlines in the next 30 days; reminders for opportunities due within 60 days |
 | Monthly review | monthly | last month's income, spending and savings rate; proposes raising a goal when the surplus allows |
 | Tax-year prep | monthly | which documents for last year's return are still missing |
+| Repeating payments | weekly | spots income or spending that comes back every month (3+ months in a row, similar amount and day) and proposes a repeating entry starting at its next date |
 | Exchange rates | daily | refreshes ECB rates (skipped with manual rates) |
 
 Routines run while the app is open: shortly after start and then every 15 minutes, for whatever is due. Start the app with `--no-routines` to switch them off. You can also switch each one off on the Routines screen.
