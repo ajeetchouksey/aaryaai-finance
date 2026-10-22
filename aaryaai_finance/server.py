@@ -36,6 +36,23 @@ MAX_BODY = MAX_UPLOAD * 4 // 3 + 1024 * 1024   # its base64 text plus the rest o
 INLINE_TYPES = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".txt", ".csv"}
 SANDBOX_CSP = "sandbox; default-src 'none'"
 PUBLIC_PATHS = ("/static/",)
+# Changes made through routes that don't write their own audit entry. Logged after they succeed; request bodies are
+# never logged (they can hold API keys or personal figures).
+AUDITED = {
+    ("POST", "/config"): "Changed settings",
+    ("POST", "/config/secret/clear"): "Removed an API key",
+    ("POST", "/model/user"): "Changed custom fields and record types",
+    ("POST", "/rules/user"): "Changed your rules",
+    ("POST", "/fx/refresh"): "Refreshed exchange rates",
+    ("POST", "/api-settings"): "Changed income and paper-trading settings",
+    ("POST", "/opportunities/inputs"): "Changed tax allowance figures",
+    ("POST", "/routines/settings"): "Changed routine settings",
+    ("POST", "/calendar/status"): "Changed a deadline's status",
+    ("POST", "/docs/file"): "Filed a document",
+    ("POST", "/docs/move"): "Moved a document",
+    ("POST", "/calc/refresh-prices"): "Refreshed holding prices",
+    ("POST", "/chat/model"): "Changed the AI model",
+}
 CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
        "font-src 'self'; connect-src 'self'; frame-src 'self' blob:; object-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 
@@ -104,6 +121,15 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
     def ctx() -> Ctx:
         return state["ctx"]
     app.state.get_ctx = ctx
+
+    @app.middleware("http")
+    async def audit_changes(request: Request, call_next):
+        resp = await call_next(request)
+        path = request.url.path
+        label = AUDITED.get((request.method, path)) or ("Deleted a chat" if request.method == "DELETE" and re.fullmatch(r"/chat/\d+", path) else None)
+        if label and resp.status_code < 400:
+            ctx().audit("You", label, path)
+        return resp
 
     @app.exception_handler(IntegrityProblem)
     async def _integrity(_req, exc: IntegrityProblem):
@@ -735,7 +761,10 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
 
     @app.post("/calendar/status")
     def calendar_status(p: dict = Body(...)):
-        return ctx().set_deadline_status(p["key"], p["status"])
+        need(isinstance(p.get("key"), str) and p.get("status") in ("open", "done"), "Send a deadline key and a status of open or done.")
+        r = ctx().set_deadline_status(p["key"], p["status"])
+        need(not r.get("error"), "No such deadline.", 404)
+        return r
 
     # ======================= rules =======================
     @app.get("/rules")

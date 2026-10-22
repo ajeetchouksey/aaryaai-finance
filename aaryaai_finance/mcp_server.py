@@ -137,6 +137,7 @@ class Server:
                     self.ctx.audit(f"MCP · {self.client}", f"Called {name}", json.dumps(args)[:200])
                     return self._ok(mid, {"content": [{"type": "text", "text": json.dumps(result, ensure_ascii=False, default=str)}], "isError": False})
                 except (ValueError, KeyError, TypeError) as e:
+                    self.ctx.audit(f"MCP · {self.client}", f"Called {name} (refused)", f"{e}"[:200])
                     return self._ok(mid, {"content": [{"type": "text", "text": f"Error: {e}"}], "isError": True})
             return self._err(mid, -32601, f"Method not found: {method}")
         except Exception as e:  # noqa: BLE001
