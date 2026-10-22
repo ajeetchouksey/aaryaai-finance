@@ -947,18 +947,7 @@ def create_app(data_dir: Path | None = None, extra_hosts: set[str] | None = None
 
     @app.get("/docs/library")
     def docs_library():
-        c = ctx()
-        meta = {d["stored_path"]: d for d in c.db.list("documents")}
-        out = []
-        for r in library(c.settings.documents_root):
-            m = meta.get(r["path"])
-            if m:
-                r.update(category=m["category"], doc_type=m["doc_type"], logged=True)
-            else:
-                rule, conf, _ = c.rules.classify("", r["name"] + " " + r["folder"])
-                r.update(category=rule.get("category", "Other") if rule else "Other", doc_type=rule["id"] if rule else None, logged=False)
-            out.append(r)
-        return out
+        return ctx().document_library()
 
     @app.get("/docs/review")
     def docs_review():

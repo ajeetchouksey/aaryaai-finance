@@ -323,6 +323,21 @@ class Ctx:
                 docs.append({"stored_path": r["path"], "original_name": r["name"], "doc_type": rule["id"], "fields": {}, "doc_date": None})
         return docs
 
+    def document_library(self) -> list[dict]:
+        """Every file in your documents folder, with its category: from the database when filed, else guessed from the name."""
+        from .rules.engine import library
+        meta = {d["stored_path"]: d for d in self.db.list("documents")}
+        out = []
+        for r in library(self.settings.documents_root):
+            m = meta.get(r["path"])
+            if m:
+                r.update(category=m["category"], doc_type=m["doc_type"], doc_date=m["doc_date"], logged=True)
+            else:
+                rule, _, _ = self.rules.classify("", r["name"] + " " + r["folder"])
+                r.update(category=rule.get("category", "Other") if rule else "Other", doc_type=rule["id"] if rule else None, logged=False)
+            out.append(r)
+        return out
+
     def save_tax_answers(self, country: str, year: int, answers: dict) -> None:
         row = next((r for r in self.db.list("tax_years") if r["country"] == country and r["year"] == int(year)), None)
         cur = json.loads(row["answers"]) if row and row.get("answers") else {}
